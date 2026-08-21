@@ -18,5 +18,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
+# Use 127.0.0.1 (not "localhost") so the check forces IPv4 — nginx listens on
+# IPv4 :80, while "localhost" can resolve to ::1 and be refused.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
-    CMD wget -qO- http://localhost/api/health >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1
