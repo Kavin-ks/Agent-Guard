@@ -28,7 +28,17 @@ class Settings(BaseSettings):
     api_key: str = ""
 
     service_name: str = "agent-guard"
-    version: str = "0.6.0"
+    version: str = "0.8.0"
+
+    # --- Hardening (Phase 8). Safe defaults; all configurable via env. ---
+    # Comma-separated allowed CORS origins. Empty => no cross-origin access.
+    cors_origins: str = ""
+    # Reject request bodies larger than this (bytes). 0 disables the check.
+    max_request_bytes: int = 2_000_000
+    # Lightweight in-memory rate limit per client. 0 disables (default: off, so
+    # it never interferes with tests/benchmarks; enable in production).
+    rate_limit_per_minute: int = 0
+    log_level: str = "INFO"
 
     # LLM key for the goal-relevance advisor (Phase 3). Read from ANTHROPIC_API_KEY.
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")

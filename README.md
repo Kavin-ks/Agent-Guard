@@ -76,7 +76,9 @@ backend/
     routes/            # health.py, guard.py, audit.py, approvals.py
   adapter/             # SDK (Phase 6): client, executor (enforcement), registry, approval
   simulator/           # mock tools + 6-scenario CLI demo (python -m simulator.demo)
-  tests/               # 146 backend tests
+  examples/            # integration example (wrap an existing tool)
+  benchmark/           # evaluation latency benchmark
+  tests/               # 171 backend tests
 frontend/              # Dashboard (Phase 7): React + TS + Vite, 14 tests
   src/api/client.ts    # centralized API layer (same-origin /api; key injected by proxy)
   src/pages/           # Dashboard, Approvals, Audit, Live Demo
@@ -461,6 +463,78 @@ guarantee. Novel/obfuscated encodings, split payloads, or unusual formats can
 evade detection; the deterministic protected-resource, scope, and destination
 gates remain the backstop. Known false positives (a benign email flagged PII →
 ASK on egress) are handled by severity/confidence, not hard blocks.
+
+## Production hardening (Phase 8)
+
+Additive hardening around the unchanged authoritative engine:
+
+- **Transport/HTTP**: security headers on every response (`X-Content-Type-Options`,
+  `X-Frame-Options: DENY`, strict `Content-Security-Policy`, `Referrer-Policy`,
+  `Cache-Control: no-store`); configurable **CORS** (default: no cross-origin);
+  **request body-size limit** (413); **opt-in rate limiting** per API-key/IP (429
+  with `Retry-After`, `/health` exempt; `0` = off so it never affects tests).
+- **Safe errors**: an unhandled exception returns a generic `500` — internals,
+  stack traces, and any secret-looking text never reach the client.
+- **Log redaction**: a root logging filter scrubs secret-looking substrings, so
+  even an accidental `logger.info(payload)` cannot leak a credential.
+- **SQLite**: WAL + `busy_timeout=5000` + a process write-lock — concurrent writers
+  don't error (tested with 4 threads × 20 writes).
+- **Auth**: constant-time `X-API-Key`, read from env, fail-closed when unset.
+
+### Security guarantees (what the tests enforce)
+
+| Guarantee | Enforced by |
+|-----------|-------------|
+| Deterministic **DENY** always wins; LLM can never override it | `risk.py` (advisory excluded from DENY threshold) + `pipeline.py::_sanitize_advisory` |
+| Raw secrets/PII/payloads never reach the LLM, response, audit, or DB | `advisors/base.py::build_advisor_request` (categories only) + redacted findings |
+| A protected tool never runs before authorization | `GuardedExecutor` — tool called only on ALLOW / approved-consumed ASK |
+| An approval can't be reused or applied to a different action | fingerprint (`fingerprint.py`) re-verified at `consume` |
+| Exfiltration DENY creates no approval (no DENY→APPROVE→EXECUTE) | `service.py` (approval only for ASK) |
+| LLM timeout/unavailable/malformed fails safe | `advisors/claude.py` → heuristic fallback; deterministic decision stands |
+
+A dedicated suite (`tests/test_security_regression.py`) asserts these against the
+real API+SDK: path traversal, policy bypass, malformed input, auth bypass, secret
+leakage, approval reuse, fingerprint mismatch, LLM override attempts, and
+tool-execution-before-authorization.
+
+### Integration example
+
+Wrap an existing tool without changing it (`backend/examples/wrap_existing_tool.py`):
+
+```python
+from adapter import GuardedExecutor, ToolRegistry, AutoApprove
+
+def delete_file(resource, **_): ...        # your existing tool — no security code
+
+reg = ToolRegistry()
+reg.add("delete_file", operation="delete", resource_kind="file", fn=delete_file)
+guard = GuardedExecutor(client, reg, AutoApprove())
+
+result = guard.execute("delete_file", "src/old.jsx", goal="Build a React frontend")
+if result.executed:            # runs only because Agent Guard authorized it
+    ...
+```
+
+### Benchmark (deterministic engine, offline advisor)
+
+`python -m benchmark.latency` — measured on this machine (n=20,000):
+
+| avg | p50 | p95 | p99 | throughput |
+|-----|-----|-----|-----|------------|
+| 0.046 ms | 0.043 ms | 0.102 ms | 0.111 ms | ~21,700 evals/sec (1 thread) |
+
+(An LLM advisory pass adds network round-trip latency; the deterministic gates —
+the security-critical path — are sub-millisecond.)
+
+### Production limitations (honest)
+
+- Single shared API key; no per-agent identity / RBAC / rotation. Front with a
+  real IdP/BFF for production.
+- SQLite + a process lock suits a single node; use PostgreSQL behind the existing
+  `AuditStore`/`ApprovalStore` interfaces for multi-node.
+- Rate limiting is in-memory per process (not shared across replicas).
+- Detection is heuristic (see Phase 4 limitations); the deterministic gates are
+  the backstop.
 
 ## 10. Security model
 
