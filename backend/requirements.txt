@@ -6,6 +6,9 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic-settings>=2.2
 
+# SDK / adapter HTTP client (Phase 6)
+httpx>=0.27
+
 # LLM goal reasoning (Phase 3)
 anthropic>=0.40
 

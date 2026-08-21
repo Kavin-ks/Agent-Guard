@@ -74,7 +74,9 @@ backend/
     deps.py bridge.py service.py   # DI, request->engine bridge, workflow service
     store/             # AuditStore/ApprovalStore interfaces + SQLite impl (persistent)
     routes/            # health.py, guard.py, audit.py, approvals.py
-  tests/               # 100 tests (engine + API + relevance + audit/approvals)
+  adapter/             # SDK (Phase 6): client, executor (enforcement), registry, approval
+  simulator/           # mock tools + 5-scenario CLI demo (python -m simulator.demo)
+  tests/               # 121 tests (engine + API + relevance + audit/approvals + SDK)
 ```
 
 ## 3. Install
@@ -283,6 +285,79 @@ derived from server-side stored data — a client-provided decision is never tru
 what it actually did — clearly labeled as agent-reported, never asserted by Agent
 Guard.
 
+## Agent Guard SDK — real execution enforcement (Phase 6)
+
+Phases 1–5 *decide*. The SDK (`backend/adapter/`) *enforces*: it sits between an
+agent and its tools and **will not invoke a tool until the action has been
+evaluated and authorized**.
+
+```
+AI AGENT → GuardedExecutor.execute(tool, resource, goal=…)
+              │
+              ├─ POST /guard/evaluate  (FIRST — before any tool call)
+              │
+              ├─ ALLOW → run tool → record execution
+              ├─ DENY  → tool NEVER called → audit BLOCKED
+              └─ ASK   → human approve/reject → consume (fingerprint re-checked)
+                              └─ authorized → run tool (exactly once)
+                              └─ refused / mismatch / expired / error → tool NEVER called
+```
+
+**Division of responsibility (say it exactly):**
+Agent Guard **evaluates and authorizes**. The adapter **enforces** the decision.
+The external tool **performs** the actual action. Agent Guard never executes tools.
+
+**Fail-closed.** Any uncertainty — API unavailable, timeout, malformed response,
+auth failure, expired approval, rejection, fingerprint mismatch — results in the
+tool **not** being called (`decision: ERROR/DENY/ASK`, `executed: false`).
+
+**Tool registry.** A tool is registered once with its operation + resource kind
+and a callable; the executor builds the evaluate request from that metadata, so
+tool authors write no security code:
+
+```python
+from adapter import AgentGuardClient, GuardedExecutor, ToolRegistry, AutoApprove
+
+reg = ToolRegistry()
+reg.add("read_file", operation="read", resource_kind="file", fn=my_read_file)
+reg.add("delete_file", operation="delete", resource_kind="file", fn=my_delete_file)
+
+client = AgentGuardClient(base_url="http://127.0.0.1:8000", api_key=API_KEY)
+guard = GuardedExecutor(client, reg, approval_handler=AutoApprove())  # or a human prompt
+
+# Instead of calling delete_file(path) directly, the agent calls:
+result = guard.execute("delete_file", "src/generated.jsx",
+                       goal="Build a React frontend")
+if result.executed:
+    use(result.output)      # tool ran, and only because Guard authorized it
+```
+
+This is **framework-neutral** — it wraps any callable, so an Anthropic/OpenAI/
+Google/LangChain/custom agent integrates the same way. No provider is hard-coded.
+
+**Trust boundary (explicit).** The adapter can only enforce tools invoked
+**through it**. If an agent bypasses the adapter and calls its tool directly,
+Agent Guard cannot stop that — integration is required. We do not claim to
+magically control an arbitrary agent.
+
+**Simulator + CLI demo.** A deterministic simulator with mock tools (`read_file`,
+`write_file`, `delete_file`, `send_external_request` — the last only *records*
+that it would have sent, never a real network call) drives the five scenarios
+through the **real** API. Run it:
+
+```bash
+cd backend
+.venv/bin/python -m simulator.demo
+```
+
+| # | Scenario | Guard | Tool | Proven |
+|---|----------|-------|------|--------|
+| 1 | `read src/App.jsx` | ALLOW | **executed** | safe action runs |
+| 2 | `read .env` | DENY | **not executed** | secret access blocked |
+| 3 | `delete src/generated.jsx` → approve | ASK→AUTH | **executed once** | HITL approval |
+| 4 | `delete src/generated.jsx` → reject | ASK | **not executed** | rejection blocks |
+| 5 | reuse approval → `delete database.sql` | **refused** | **not executed** | fingerprint integrity |
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
@@ -339,7 +414,7 @@ def guarded_execute(goal, action, resource, run_tool, **kw):
 
 ```bash
 cd backend
-.venv/bin/python -m pytest -q      # 100 tests
+.venv/bin/python -m pytest -q      # 121 tests
 ```
 
 ## Roadmap
@@ -349,7 +424,7 @@ cd backend
 3. ✅ Goal-aware intelligence (goal representation, relevance advisor, drift) — **this phase**
 4. Extended risk + sensitive-data detection
 5. ✅ Audit log + approval queue (persistent, human-in-the-loop) — **this phase**
-6. Agent adapter SDK + 5-scenario simulator
+6. ✅ Agent adapter SDK + execution enforcement + 5-scenario simulator — **this phase**
 7. Professional React/TS dashboard
 8. Expanded automated tests
 9. Docker / deployment / docs

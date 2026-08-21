@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     api_key: str = ""
 
     service_name: str = "agent-guard"
-    version: str = "0.4.0"
+    version: str = "0.6.0"
 
     # LLM key for the goal-relevance advisor (Phase 3). Read from ANTHROPIC_API_KEY.
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
