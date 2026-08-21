@@ -13,7 +13,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from agentguard.audit import ApprovalRequest, AuditEvent
 from agentguard.models import Operation, ResourceKind
+
+# Explicit trust-boundary note included on every evaluate response.
+EXECUTION_NOTE = (
+    "Agent Guard evaluates and records decisions only; it never executes the "
+    "action. Honoring this decision is the calling agent's responsibility."
+)
 
 
 class PolicyOverride(BaseModel):
@@ -97,9 +104,54 @@ class EvaluateResponse(BaseModel):
     advisory_source: str | None = None
     advisory_reason: str | None = None
 
+    # --- workflow (Phase 5) ---
+    event_id: str
+    action_fingerprint: str
+    approval_required: bool = False        # True only when decision == ASK
+    approval_id: str | None = None
+    execution_status: str
+    execution_note: str = EXECUTION_NOTE
+
     policy: AppliedPolicy
     action_id: UUID
     latency_ms: float
+
+
+class ResolveRequest(BaseModel):
+    """Body for approve/reject. The approver is recorded in the audit trail."""
+
+    model_config = ConfigDict(extra="forbid")
+    approver: str = Field(default="human", min_length=1, max_length=256)
+
+
+class ConsumeResponse(BaseModel):
+    """Result of the fingerprint-verified pre-execution gate."""
+
+    authorized: bool
+    reason: str
+    decision: str
+    approval_status: str
+
+
+class ExecutionReportRequest(BaseModel):
+    """Agent-reported execution outcome (Agent Guard does not execute)."""
+
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["REPORTED_EXECUTED", "REPORTED_FAILED", "REPORTED_SKIPPED"]
+
+
+class AuditListResponse(BaseModel):
+    items: list[AuditEvent]
+    total: int
+    limit: int
+    offset: int
+
+
+class ApprovalListResponse(BaseModel):
+    items: list[ApprovalRequest]
+    total: int
+    limit: int
+    offset: int
 
 
 class HealthResponse(BaseModel):

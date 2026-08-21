@@ -1,19 +1,17 @@
 """
-The core interception endpoint: POST /guard/evaluate.
+Core interception endpoint: POST /guard/evaluate.
 
-Receives a proposed agent action, runs it through the Phase 1 security engine,
-and returns ALLOW / ASK / DENY with an explainable reason. Agent Guard does NOT
-execute the action — the caller is responsible for honoring the verdict.
+Runs the action through the security engine via the service layer, persists an
+audit record, and (for ASK) creates a human approval request. Agent Guard does
+NOT execute the action — the response makes that trust boundary explicit.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from agentguard import Engine
-
 from ..auth import require_api_key
-from ..deps import build_action, build_policy, get_engine
+from ..deps import get_service
 from ..schemas import (
     AppliedPolicy,
     EvaluateRequest,
@@ -21,6 +19,8 @@ from ..schemas import (
     SecretOut,
     SignalOut,
 )
+from ..service import GuardService
+from ..bridge import build_policy
 
 router = APIRouter(prefix="/guard", tags=["guard"])
 
@@ -32,14 +32,12 @@ router = APIRouter(prefix="/guard", tags=["guard"])
 )
 def evaluate(
     req: EvaluateRequest,
-    engine: Engine = Depends(get_engine),
+    service: GuardService = Depends(get_service),
 ) -> EvaluateResponse:
-    policy = build_policy(req)
-    action = build_action(req)
-
-    # The deterministic engine is authoritative. Nothing in this layer can
-    # upgrade a DENY to ALLOW.
-    result = engine.evaluate(action, policy)
+    outcome = service.evaluate(req)
+    result = outcome.result
+    event = outcome.event
+    policy = build_policy(req)  # for the applied-policy echo (deterministic, cheap)
 
     return EvaluateResponse(
         decision=result.decision.value,
@@ -47,21 +45,11 @@ def evaluate(
         reason=result.reason,
         matched_rule=result.matched_rule,
         sensitive_data_detected=result.sensitive_data_detected,
-        secrets=[
-            SecretOut(type=s.type, fingerprint=s.fingerprint, entropy=s.entropy)
-            for s in result.secrets
-        ],
-        signals=[
-            SignalOut(
-                gate=s.gate,
-                severity=s.severity.value,
-                risk_points=s.risk_points,
-                reason=s.reason,
-                rule_id=s.rule_id,
-                advisory=s.advisory,
-            )
-            for s in result.signals
-        ],
+        secrets=[SecretOut(type=s.type, fingerprint=s.fingerprint, entropy=s.entropy)
+                 for s in result.secrets],
+        signals=[SignalOut(gate=s.gate, severity=s.severity.value, risk_points=s.risk_points,
+                           reason=s.reason, rule_id=s.rule_id, advisory=s.advisory)
+                 for s in result.signals],
         deterministic_decision=(
             result.deterministic_decision.value if result.deterministic_decision else None
         ),
@@ -72,6 +60,11 @@ def evaluate(
         advisory_available=result.advisory_available,
         advisory_source=result.advisory_source,
         advisory_reason=result.advisory_reason,
+        event_id=event.event_id,
+        action_fingerprint=event.action_fingerprint,
+        approval_required=outcome.approval is not None,
+        approval_id=outcome.approval.approval_id if outcome.approval else None,
+        execution_status=event.execution_status,
         policy=AppliedPolicy(
             session_id=policy.session_id,
             allowed_scopes=policy.allowed_scopes,

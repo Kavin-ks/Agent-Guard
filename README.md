@@ -71,9 +71,10 @@ backend/
     config.py          # env-driven settings (pydantic-settings)
     auth.py            # X-API-Key auth (constant-time)
     schemas.py         # request/response contract (extra fields forbidden)
-    deps.py            # engine singleton + request→engine bridge
-    routes/            # health.py, guard.py
-  tests/               # 77 tests (engine + API + relevance)
+    deps.py bridge.py service.py   # DI, request->engine bridge, workflow service
+    store/             # AuditStore/ApprovalStore interfaces + SQLite impl (persistent)
+    routes/            # health.py, guard.py, audit.py, approvals.py
+  tests/               # 100 tests (engine + API + relevance + audit/approvals)
 ```
 
 ## 3. Install
@@ -118,7 +119,15 @@ Interactive docs: `http://127.0.0.1:8000/docs`.
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET`  | `/health` | none | service + engine status, gate list |
-| `POST` | `/guard/evaluate` | `X-API-Key` | evaluate a proposed action → decision |
+| `POST` | `/guard/evaluate` | `X-API-Key` | evaluate a proposed action → decision (+ audit record; +approval if ASK) |
+| `GET`  | `/audit` | `X-API-Key` | list audit events (filter: decision, session, resource, min_risk, goal_drift, approval_status, since/until; paginated) |
+| `GET`  | `/audit/{event_id}` | `X-API-Key` | one redacted audit event |
+| `POST` | `/audit/{event_id}/execution` | `X-API-Key` | record the agent's self-reported execution outcome |
+| `GET`  | `/approvals` | `X-API-Key` | list approval requests (filter by status) |
+| `GET`  | `/approvals/{id}` | `X-API-Key` | one approval request |
+| `POST` | `/approvals/{id}/approve` | `X-API-Key` | approve a PENDING ASK |
+| `POST` | `/approvals/{id}/reject` | `X-API-Key` | reject a PENDING ASK |
+| `POST` | `/approvals/{id}/consume` | `X-API-Key` | **fingerprint-verified pre-execution gate** — authorizes the exact approved action only |
 
 Request body (`POST /guard/evaluate`):
 
@@ -226,6 +235,54 @@ heuristic; if even that is bypassed, the advisory layer contributes nothing and 
 restriction, so its absence can never turn a DENY/ASK into an ALLOW. The response
 distinguishes `deterministic_decision`, `advisory_*`, and the final `decision`.
 
+## Human-in-the-loop workflow (Phase 5)
+
+Every decision is **persisted** to SQLite (survives restarts) as a redacted audit
+event. `ASK` decisions create a **human approval request**; the approved action is
+bound to an integrity fingerprint so an approval can never be reused for a
+different action.
+
+```
+POST /guard/evaluate
+   ├─ ALLOW → audit event                          → agent may proceed
+   ├─ DENY  → audit event (execution=BLOCKED)       → no approval possible
+   └─ ASK   → audit event + PENDING approval        → human decides
+                 POST /approvals/{id}/approve|reject
+                 POST /approvals/{id}/consume  ← re-checks fingerprint before execution
+```
+
+- **Example 1 — normal frontend action.** `write src/App.jsx` → **ALLOW**, audit
+  record created.
+- **Example 2 — `.env` access.** `read .env` → **DENY**, audit record created,
+  `execution_status=BLOCKED`, **no approval possible**.
+- **Example 3 — destructive action.** `delete src/generated.jsx` → **ASK**,
+  approval request created; human `POST …/approve` → `APPROVED`, recorded.
+- **Example 4 — human rejects.** `POST …/reject` → `REJECTED`; a later
+  `consume` returns `authorized: false`.
+
+**Approval security model — the queue is not a bypass.** (1) A `DENY` never creates
+an approval, so it can never become `APPROVED`. (2) Approvals exist only for `ASK`.
+(3) Each approval is bound to an **action fingerprint** = SHA-256 over goal + policy
++ operation + resource + destination + payload-hash + context. (4) `consume`
+re-derives the fingerprint from the action the agent actually intends to run; any
+change (action, resource, goal, policy, context) → mismatch → **not authorized**.
+(5) Consumed and (6) expired approvals are refused. (7) The final state is always
+derived from server-side stored data — a client-provided decision is never trusted.
+
+**Action-integrity attack (blocked, tested).** Approve a harmless
+`delete src/generated.jsx`, then try to `consume` it as `delete database.sql`:
+
+```json
+{ "authorized": false,
+  "reason": "action fingerprint mismatch — the goal, policy, action, resource, or context changed since approval; the approval does not apply." }
+```
+
+**Trust boundary (decision ≠ execution).** Agent Guard evaluates and records; it
+**never executes** the action. Responses carry `execution_status` and an
+`execution_note` saying so. `POST /audit/{id}/execution` lets the agent *report*
+what it actually did — clearly labeled as agent-reported, never asserted by Agent
+Guard.
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
@@ -282,7 +339,7 @@ def guarded_execute(goal, action, resource, run_tool, **kw):
 
 ```bash
 cd backend
-.venv/bin/python -m pytest -q      # 77 tests: engine + API + goal-awareness
+.venv/bin/python -m pytest -q      # 100 tests
 ```
 
 ## Roadmap
@@ -291,7 +348,7 @@ cd backend
 2. ✅ Action interception API (`/guard/evaluate`, auth, validation)
 3. ✅ Goal-aware intelligence (goal representation, relevance advisor, drift) — **this phase**
 4. Extended risk + sensitive-data detection
-5. Audit log + approval queue
+5. ✅ Audit log + approval queue (persistent, human-in-the-loop) — **this phase**
 6. Agent adapter SDK + 5-scenario simulator
 7. Professional React/TS dashboard
 8. Expanded automated tests

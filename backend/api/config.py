@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     api_key: str = ""
 
     service_name: str = "agent-guard"
-    version: str = "0.3.0"
+    version: str = "0.4.0"
 
     # LLM key for the goal-relevance advisor (Phase 3). Read from ANTHROPIC_API_KEY.
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     advisor: str = "auto"
     advisor_model: str = "claude-opus-5"
     advisor_timeout_s: float = 8.0
+
+    # Persistence (Phase 5). SQLite by default so the audit trail survives restarts.
+    db_path: str = "./data/agentguard.db"
+    approval_ttl_seconds: int = 3600
 
 
 @lru_cache

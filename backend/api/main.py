@@ -14,7 +14,7 @@ import logging
 from fastapi import FastAPI
 
 from .config import get_settings
-from .routes import guard, health
+from .routes import approvals, audit, guard, health
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agentguard.api")
@@ -34,6 +34,8 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(guard.router)
+    app.include_router(audit.router)
+    app.include_router(approvals.router)
 
     if not settings.api_key:
         logger.warning(

@@ -33,6 +33,11 @@ build/
 *.log
 audit-*.jsonl
 data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # --- OS / editor ---
 .DS_Store
