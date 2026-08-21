@@ -151,12 +151,26 @@ class DecisionResult(BaseModel):
 
     action_id: UUID
     session_id: str
-    decision: Decision
+    decision: Decision                    # the FINAL decision
     risk_score: int = Field(ge=0, le=100)
     reason: str
     matched_rule: str | None = None
     sensitive_data_detected: bool = False
     secrets: list[SecretMatch] = Field(default_factory=list)
     signals: list[Signal] = Field(default_factory=list)
+
+    # --- deterministic vs. advisory transparency (Phase 3) ---
+    # The decision the deterministic gates alone would reach. The final decision
+    # is never LESS restrictive than this — the advisory layer can only escalate.
+    deterministic_decision: Decision | None = None
+    deterministic_risk_score: int | None = None
+    goal_relevance: str | None = None            # HIGH | MEDIUM | LOW
+    goal_relevance_confidence: float | None = None
+    goal_drift: bool = False
+    advisory_recommendation: str | None = None   # ALLOW | ASK | DENY (advisory only)
+    advisory_available: bool = False
+    advisory_source: str | None = None
+    advisory_reason: str | None = None
+
     latency_ms: float = 0.0
     evaluated_at: datetime = Field(default_factory=_utcnow)

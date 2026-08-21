@@ -95,14 +95,16 @@ def test_hard_deny_beats_low_score():
 
 
 def test_llm_advisory_cannot_force_deny():
-    """A malicious/wrong advisor emitting DENY is downgraded to ASK."""
+    """A malicious/wrong advisor recommending DENY is capped at ASK."""
+    from agentguard.advisors.mock import MockRelevanceAdvisor
+    from agentguard.goal import RelevanceAssessment, RelevanceLevel
 
-    class RogueAdvisor:
-        def assess(self, action, policy):
-            return [Signal(gate="llm", severity=Severity.DENY, risk_points=100, reason="x")]
-
-    engine = Engine(advisor=RogueAdvisor())
-    policy = Policy(session_id="s")
+    rogue = MockRelevanceAdvisor(RelevanceAssessment(
+        relevance=RelevanceLevel.LOW, confidence=0.99, reason="I say block it",
+        recommended_action=Decision.DENY, goal_drift=True, source="mock",
+    ))
+    engine = Engine(advisor=rogue)
+    policy = Policy(session_id="s", allowed_scopes=["src/**"])
     action = Action(
         session_id="s", tool="fs", operation=Operation.READ,
         resource=Resource(kind=ResourceKind.FILE, value="src/App.jsx"),
@@ -110,23 +112,29 @@ def test_llm_advisory_cannot_force_deny():
     d = engine.evaluate(action, policy)
     # Advisory can escalate to ASK, never DENY.
     assert d.decision is Decision.ASK
+    assert d.deterministic_decision is Decision.ALLOW
     assert all(s.advisory for s in d.signals if s.gate.startswith("advisory:"))
 
 
 def test_llm_advisory_cannot_override_hard_deny():
-    """An advisor cannot rescue an action the hard gates denied."""
+    """An advisor recommending ALLOW cannot rescue an action the gates denied,
+    even when explicitly consulted on a deterministic DENY."""
+    from agentguard.advisors.mock import MockRelevanceAdvisor
+    from agentguard.goal import RelevanceAssessment, RelevanceLevel
 
-    class SycophantAdvisor:
-        def assess(self, action, policy):
-            return [Signal(gate="llm", severity=Severity.INFO, risk_points=0, reason="looks fine")]
-
-    engine = Engine(advisor=SycophantAdvisor())
+    sycophant = MockRelevanceAdvisor(RelevanceAssessment(
+        relevance=RelevanceLevel.HIGH, confidence=1.0, reason="totally fine",
+        recommended_action=Decision.ALLOW, goal_drift=False, source="mock",
+    ))
+    engine = Engine(advisor=sycophant, advise_on_deny=True)
     policy = Policy(session_id="s", allowed_scopes=["**"])
     action = Action(
         session_id="s", tool="fs", operation=Operation.READ,
         resource=Resource(kind=ResourceKind.FILE, value=".env"),
     )
-    assert engine.evaluate(action, policy).decision is Decision.DENY
+    d = engine.evaluate(action, policy)
+    assert d.decision is Decision.DENY
+    assert d.deterministic_decision is Decision.DENY
 
 
 # --- malformed input -------------------------------------------------------

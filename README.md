@@ -36,16 +36,28 @@ AI AGENT
 AGENT ADAPTER  ──HTTP──►  AGENT GUARD API  (FastAPI)
                               │
                               ▼
-                       SECURITY ENGINE  (pure, deterministic)
-                              │  ordered gates + risk scoring
-                              ▼
-                    ALLOW  /  ASK  /  DENY   (+ reason, signals)
+          ┌────────────────── SECURITY ENGINE ───────────────────┐
+          │                                                       │
+          │  (1) DETERMINISTIC GATES  ── the security authority   │
+          │      secret_exfil → protected_resource →              │
+          │      policy_scope → destructive → external_comm       │
+          │              │                                        │
+          │              ▼  deterministic decision                │
+          │  (2) LLM RELEVANCE ADVISOR  ── advisory only          │
+          │      goal ↔ action semantic fit  (Claude / heuristic) │
+          │      may escalate ALLOW→ASK; NEVER creates/cancels DENY│
+          │              │                                        │
+          │              ▼  final = max-severity(det, advisory)   │
+          └───────────────────────────────────────────────────────┘
+                              │
+                    ALLOW  /  ASK  /  DENY   (+ reason, relevance, signals)
    ◄──────────────────────────┘
-   agent executes ONLY on ALLOW (ASK -> ask a human)
+   agent executes ONLY on ALLOW (ASK -> ask a human; DENY -> block)
 ```
 
 Deterministic gates run in authority order:
 `secret_exfil → protected_resource → policy_scope → destructive → external_comm`.
+The relevance advisor runs *after* them and only ever adds advisory risk.
 
 ```
 backend/
@@ -61,7 +73,7 @@ backend/
     schemas.py         # request/response contract (extra fields forbidden)
     deps.py            # engine singleton + request→engine bridge
     routes/            # health.py, guard.py
-  tests/               # 57 tests (engine + API)
+  tests/               # 77 tests (engine + API + relevance)
 ```
 
 ## 3. Install
@@ -84,7 +96,9 @@ cp ../.env.example ./.env
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `AGENTGUARD_API_KEY` | **yes** | Shared key required on `/guard/*`. If unset, the API **fails closed** (rejects all protected requests). |
-| `ANTHROPIC_API_KEY` | no (Phase 3) | LLM goal reasoning. The engine/tests do not need it. |
+| `ANTHROPIC_API_KEY` | no | Enables the Claude relevance advisor. Without it, the offline heuristic advisor is used — goal-awareness still works. Tests never need it. |
+| `AGENTGUARD_ADVISOR` | no | `auto` (default: Claude if key present, else heuristic), `llm`, `heuristic`, or `off`. |
+| `AGENTGUARD_ADVISOR_MODEL` | no | Advisor model (default `claude-opus-5`). |
 
 ```bash
 export AGENTGUARD_API_KEY="choose-a-strong-key"
@@ -167,11 +181,56 @@ Exfiltration (secret redacted in the response):
   "secrets": [ { "type": "anthropic_api_key", "fingerprint": "sk-…HHHH", "entropy": 4.6 } ] }
 ```
 
+## Goal-aware intelligence (Phase 3)
+
+Agent Guard understands the **semantic relationship** between the user's goal and
+each proposed action — catching actions that are technically permitted but don't
+serve the objective (goal drift).
+
+**Deterministic vs. AI responsibilities**
+
+| Layer | Does | Authority |
+|-------|------|-----------|
+| Deterministic gates | secrets, protected files, scope, destructive, external comms | **Decides** — can force ALLOW/ASK/DENY |
+| Goal compiler | goal → inspectable `GoalRepresentation` + `Policy` (keyword-based) | Deterministic; can only *add* restrictions |
+| LLM relevance advisor | rates goal↔action fit (HIGH/MEDIUM/LOW), flags drift | **Advises only** — can escalate ALLOW→ASK, never create/cancel a DENY |
+
+The advisor (`ClaudeRelevanceAdvisor`, default model `claude-opus-5`, configurable)
+returns a structured `{relevance, confidence, goal_drift, recommended_action, reason}`.
+Its authority is bounded in three places: `pipeline.py::_sanitize_advisory` caps
+advisory severity at ASK; `risk.py` excludes advisory points from the DENY
+threshold (a DENY must be reachable from **deterministic** points alone); and the
+pipeline reports `deterministic_decision` alongside the `final` decision so the two
+are always comparable.
+
+**Goal-drift detection.** An action with LOW goal relevance and no topical
+connection to the objective (e.g. "search unrelated cryptocurrency prices" during
+"build a React frontend") is flagged `goal_drift: true` and escalated to ASK/DENY
+per policy — with an explainable reason.
+
+**Data minimization — exactly what the LLM receives.** The advisor is given ONLY
+a minimized `AdvisorRequest` (`advisors/base.py::build_advisor_request`):
+
+- ✅ sent: the goal text, operation, resource path/URL, tool name, destination,
+  `payload_present` (bool), `payload_contains_secret` (bool), and context **keys**.
+- ❌ never sent: the raw payload, file contents, any secret value, or context values.
+
+Secret presence is detected locally and passed as a boolean. This is verified by a
+test that routes a real secret through the engine and asserts it never appears in
+what the advisor received.
+
+**Failure behavior (never fail-open).** If the LLM is unavailable, times out, or
+returns malformed JSON, the advisor falls back to the deterministic offline
+heuristic; if even that is bypassed, the advisory layer contributes nothing and the
+**deterministic decision stands**. The advisory layer can only ever *raise*
+restriction, so its absence can never turn a DENY/ASK into an ALLOW. The response
+distinguishes `deterministic_decision`, `advisory_*`, and the final `decision`.
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
-  detection, destructive patterns) can force `DENY`/`ASK`. The LLM advisor (Phase 3)
-  is sanitized so it can escalate a borderline `ALLOW` to `ASK` but can **never**
+  detection, destructive patterns) can force `DENY`/`ASK`. The LLM advisor is
+  sanitized so it can escalate a borderline `ALLOW` to `ASK` but can **never**
   create nor override a hard `DENY` — enforced in `risk.py` (a DENY must be
   reachable from deterministic points alone) and `pipeline.py::_sanitize_advisory`.
 - **A caller/policy can only tighten, never loosen** built-in protections. A
@@ -223,14 +282,14 @@ def guarded_execute(goal, action, resource, run_tool, **kw):
 
 ```bash
 cd backend
-.venv/bin/python -m pytest -q      # 57 tests: engine + API
+.venv/bin/python -m pytest -q      # 77 tests: engine + API + goal-awareness
 ```
 
 ## Roadmap
 
 1. ✅ Engine core (models, gates, risk)
-2. ✅ Action interception API (`/guard/evaluate`, auth, validation) — **this phase**
-3. Goal → policy compiler (deterministic + Claude)
+2. ✅ Action interception API (`/guard/evaluate`, auth, validation)
+3. ✅ Goal-aware intelligence (goal representation, relevance advisor, drift) — **this phase**
 4. Extended risk + sensitive-data detection
 5. Audit log + approval queue
 6. Agent adapter SDK + 5-scenario simulator

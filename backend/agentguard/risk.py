@@ -102,6 +102,10 @@ def aggregate(
         sensitive_data_detected=bool(secrets),
         secrets=secrets,
         signals=signals,
+        # Default: deterministic == final. The pipeline overrides these when an
+        # advisory pass runs, so the two decisions can be compared explicitly.
+        deterministic_decision=final,
+        deterministic_risk_score=score,
         latency_ms=round(latency_ms, 2),
     )
 

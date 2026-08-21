@@ -79,13 +79,24 @@ class AppliedPolicy(BaseModel):
 
 
 class EvaluateResponse(BaseModel):
-    decision: Literal["ALLOW", "ASK", "DENY"]
+    decision: Literal["ALLOW", "ASK", "DENY"]        # the FINAL decision
     risk_score: int
     reason: str
     matched_rule: str | None = None
     sensitive_data_detected: bool = False
     secrets: list[SecretOut] = Field(default_factory=list)
     signals: list[SignalOut] = Field(default_factory=list)
+
+    # --- deterministic vs. advisory transparency (Phase 3) ---
+    deterministic_decision: str | None = None
+    goal_relevance: str | None = None            # HIGH | MEDIUM | LOW
+    goal_relevance_confidence: float | None = None
+    goal_drift: bool = False
+    advisory_recommendation: str | None = None   # advisory only
+    advisory_available: bool = False
+    advisory_source: str | None = None
+    advisory_reason: str | None = None
+
     policy: AppliedPolicy
     action_id: UUID
     latency_ms: float

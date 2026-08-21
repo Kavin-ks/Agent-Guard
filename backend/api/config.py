@@ -28,10 +28,19 @@ class Settings(BaseSettings):
     api_key: str = ""
 
     service_name: str = "agent-guard"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
 
-    # LLM key (Phase 3). Not used yet; kept out of the AGENTGUARD_ prefix.
+    # LLM key for the goal-relevance advisor (Phase 3). Read from ANTHROPIC_API_KEY.
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+
+    # Advisor selection (AGENTGUARD_ADVISOR):
+    #   auto      -> Claude if a key is present, else the offline heuristic
+    #   llm       -> Claude advisor (falls back to heuristic if the LLM fails)
+    #   heuristic -> deterministic offline advisor only (no network)
+    #   off       -> no advisory layer (deterministic gates only)
+    advisor: str = "auto"
+    advisor_model: str = "claude-opus-5"
+    advisor_timeout_s: float = 8.0
 
 
 @lru_cache

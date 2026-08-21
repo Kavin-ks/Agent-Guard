@@ -18,10 +18,13 @@ TEST_KEY = "test-key-123"
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     os.environ["AGENTGUARD_API_KEY"] = TEST_KEY
-    # Rebuild settings/app with the test key in place.
+    # Force the offline heuristic advisor so tests never make a network call.
+    os.environ["AGENTGUARD_ADVISOR"] = "heuristic"
     from api.config import get_settings
+    from api.deps import get_engine
 
     get_settings.cache_clear()
+    get_engine.cache_clear()
     from api.main import create_app
 
     return TestClient(create_app())
@@ -170,4 +173,29 @@ def test_caller_policy_cannot_override_deny(client):
         ),
         headers=_auth(),
     )
-    assert r.json()["decision"] == "DENY"
+    body = r.json()
+    assert body["decision"] == "DENY"
+    assert body["deterministic_decision"] == "DENY"
+
+
+# Phase 3: goal-awareness fields are surfaced -------------------------------
+def test_response_exposes_goal_relevance_fields(client):
+    r = client.post("/guard/evaluate", json=_req(action="write", resource="src/App.jsx"),
+                    headers=_auth())
+    body = r.json()
+    assert body["goal_relevance"] == "HIGH"
+    assert body["goal_drift"] is False
+    assert body["advisory_available"] is True
+    assert body["advisory_source"] == "heuristic"
+
+
+def test_response_flags_goal_drift(client):
+    r = client.post(
+        "/guard/evaluate",
+        json=_req(action="network", resource="https://prices.example/crypto",
+                  destination="https://prices.example/crypto", tool="browser"),
+        headers=_auth(),
+    )
+    body = r.json()
+    assert body["goal_drift"] is True
+    assert body["goal_relevance"] == "LOW"

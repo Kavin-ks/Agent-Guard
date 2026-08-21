@@ -12,16 +12,37 @@ from __future__ import annotations
 from functools import lru_cache
 
 from agentguard import Action, Engine, Operation, Policy, Resource
+from agentguard.advisors import ClaudeRelevanceAdvisor, HeuristicRelevanceAdvisor
 from agentguard.goal_compiler import compile_goal
 from agentguard.models import ResourceKind
 
+from .config import get_settings
 from .schemas import EvaluateRequest
 
 
 @lru_cache
 def get_engine() -> Engine:
-    """Shared, stateless engine (default deterministic gates; no LLM advisor yet)."""
-    return Engine()
+    """Shared, stateless engine with the configured goal-relevance advisor.
+
+    The advisor is advisory only — the deterministic gates remain authoritative.
+    """
+    s = get_settings()
+    mode = (s.advisor or "auto").lower()
+
+    if mode == "off":
+        advisor = None
+    elif mode == "heuristic":
+        advisor = HeuristicRelevanceAdvisor()
+    elif mode == "llm" or (mode == "auto" and s.anthropic_api_key):
+        advisor = ClaudeRelevanceAdvisor(
+            model=s.advisor_model,
+            timeout_s=s.advisor_timeout_s,
+            fallback=HeuristicRelevanceAdvisor(),
+        )
+    else:  # auto without a key -> offline heuristic (goal-awareness still works)
+        advisor = HeuristicRelevanceAdvisor()
+
+    return Engine(advisor=advisor)
 
 
 def _infer_kind(req: EvaluateRequest) -> ResourceKind:

@@ -62,6 +62,16 @@ def evaluate(
             )
             for s in result.signals
         ],
+        deterministic_decision=(
+            result.deterministic_decision.value if result.deterministic_decision else None
+        ),
+        goal_relevance=result.goal_relevance,
+        goal_relevance_confidence=result.goal_relevance_confidence,
+        goal_drift=result.goal_drift,
+        advisory_recommendation=result.advisory_recommendation,
+        advisory_available=result.advisory_available,
+        advisory_source=result.advisory_source,
+        advisory_reason=result.advisory_reason,
         policy=AppliedPolicy(
             session_id=policy.session_id,
             allowed_scopes=policy.allowed_scopes,
