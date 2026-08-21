@@ -1,0 +1,99 @@
+"""
+API request/response schemas.
+
+These are the wire contract, kept separate from the engine's internal models.
+All request models forbid unexpected fields (``extra="forbid"``) so malformed or
+injected payloads are rejected with 422 before reaching the engine.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from agentguard.models import Operation, ResourceKind
+
+
+class PolicyOverride(BaseModel):
+    """Optional explicit policy fields. Any provided field overrides the
+    goal-derived default. Note: ``protected_resources`` can only ADD protections;
+    the engine always unions built-ins and never removes them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_scopes: list[str] | None = None
+    restricted_scopes: list[str] | None = None
+    protected_resources: list[str] | None = None
+    external_communication: Literal["deny", "ask", "allow"] | None = None
+    network_allowlist: list[str] | None = None
+    destructive_requires_approval: bool | None = None
+
+
+class EvaluateRequest(BaseModel):
+    """A proposed agent action submitted for evaluation BEFORE execution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = Field(..., min_length=1, max_length=4000)
+    action: Operation = Field(..., description="Normalized operation, e.g. 'read','write','transmit'")
+    resource: str = Field(..., min_length=1, max_length=8192)
+    resource_kind: ResourceKind | None = Field(
+        default=None, description="Optional; inferred from operation/resource if omitted"
+    )
+    tool: str = Field(default="generic", max_length=128)
+    payload: str | None = Field(default=None, max_length=1_000_000)
+    destination: str | None = Field(default=None, max_length=8192)
+    context: dict = Field(default_factory=dict)
+    session_id: str = Field(default="default", min_length=1, max_length=256)
+    agent_id: str = Field(default="unknown-agent", max_length=256)
+    policy: PolicyOverride | None = None
+
+
+class SignalOut(BaseModel):
+    gate: str
+    severity: str
+    risk_points: int
+    reason: str
+    rule_id: str | None = None
+    advisory: bool = False
+
+
+class SecretOut(BaseModel):
+    """Redacted secret finding. Never contains the raw value."""
+
+    type: str
+    fingerprint: str
+    entropy: float
+
+
+class AppliedPolicy(BaseModel):
+    """Summary of the policy actually enforced, echoed back for transparency."""
+
+    session_id: str
+    allowed_scopes: list[str]
+    restricted_scopes: list[str]
+    external_communication: str
+    builtin_protections_enforced: bool = True
+
+
+class EvaluateResponse(BaseModel):
+    decision: Literal["ALLOW", "ASK", "DENY"]
+    risk_score: int
+    reason: str
+    matched_rule: str | None = None
+    sensitive_data_detected: bool = False
+    secrets: list[SecretOut] = Field(default_factory=list)
+    signals: list[SignalOut] = Field(default_factory=list)
+    policy: AppliedPolicy
+    action_id: UUID
+    latency_ms: float
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok"]
+    service: str
+    version: str
+    engine: Literal["ready"]
+    gates: list[str]
