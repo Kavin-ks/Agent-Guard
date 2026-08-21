@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..detectors.base import SensitiveFinding
+from ..detectors.scan import scan_text
 from ..detectors.secrets import SecretFinding, detect_secrets
 from ..models import Action, Policy, Signal
 
@@ -31,12 +33,25 @@ class GateContext:
     action: Action
     policy: Policy
     _payload_secrets: list[SecretFinding] | None = field(default=None, repr=False)
+    _sensitive: list[SensitiveFinding] | None = field(default=None, repr=False)
 
     @property
     def payload_secrets(self) -> list[SecretFinding]:
         if self._payload_secrets is None:
             self._payload_secrets = detect_secrets(self.action.payload)
         return self._payload_secrets
+
+    @property
+    def sensitive(self) -> list[SensitiveFinding]:
+        """All sensitive findings (secrets + PII + financial) in the payload and
+        stringified context values. Cached; the raw text never leaves here."""
+        if self._sensitive is None:
+            findings = scan_text(self.action.payload, "payload")
+            for k, v in (self.action.context or {}).items():
+                if isinstance(v, str):
+                    findings.extend(scan_text(v, "context"))
+            self._sensitive = findings
+        return self._sensitive
 
 
 class Gate:

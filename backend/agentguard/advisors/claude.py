@@ -86,6 +86,8 @@ class ClaudeRelevanceAdvisor:
                 "destination": request.destination,
                 "payload_present": request.payload_present,
                 "payload_contains_secret": request.payload_contains_secret,
+                "payload_contains_sensitive_data": request.payload_contains_sensitive_data,
+                "sensitive_categories": request.sensitive_categories,
                 "context_keys": request.context_keys,
             },
         })

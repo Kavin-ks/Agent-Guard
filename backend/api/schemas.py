@@ -75,6 +75,17 @@ class SecretOut(BaseModel):
     entropy: float
 
 
+class SensitiveOut(BaseModel):
+    """Redacted sensitive-data finding. Never contains the raw value."""
+
+    category: str
+    subtype: str
+    severity: str
+    confidence: float
+    fingerprint: str
+    location: str
+
+
 class AppliedPolicy(BaseModel):
     """Summary of the policy actually enforced, echoed back for transparency."""
 
@@ -92,6 +103,8 @@ class EvaluateResponse(BaseModel):
     matched_rule: str | None = None
     sensitive_data_detected: bool = False
     secrets: list[SecretOut] = Field(default_factory=list)
+    sensitive: list[SensitiveOut] = Field(default_factory=list)
+    sensitive_categories: list[str] = Field(default_factory=list)
     signals: list[SignalOut] = Field(default_factory=list)
 
     # --- deterministic vs. advisory transparency (Phase 3) ---

@@ -17,6 +17,7 @@ from ..schemas import (
     EvaluateRequest,
     EvaluateResponse,
     SecretOut,
+    SensitiveOut,
     SignalOut,
 )
 from ..service import GuardService
@@ -47,6 +48,10 @@ def evaluate(
         sensitive_data_detected=result.sensitive_data_detected,
         secrets=[SecretOut(type=s.type, fingerprint=s.fingerprint, entropy=s.entropy)
                  for s in result.secrets],
+        sensitive=[SensitiveOut(category=s.category, subtype=s.subtype, severity=s.severity,
+                                confidence=s.confidence, fingerprint=s.fingerprint, location=s.location)
+                   for s in result.sensitive],
+        sensitive_categories=result.sensitive_categories,
         signals=[SignalOut(gate=s.gate, severity=s.severity.value, risk_points=s.risk_points,
                            reason=s.reason, rule_id=s.rule_id, advisory=s.advisory)
                  for s in result.signals],

@@ -122,6 +122,19 @@ class SecretMatch(BaseModel):
     entropy: float
 
 
+class SensitiveMatch(BaseModel):
+    """Redacted sensitive-data finding surfaced on a decision/audit. Never raw."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: str          # SECRET | AUTHENTICATION | PII | FINANCIAL | SENSITIVE_FILE
+    subtype: str           # api_key | email | credit_card | aadhaar | ...
+    severity: str          # LOW | MEDIUM | HIGH | CRITICAL
+    confidence: float
+    fingerprint: str       # redacted, e.g. "sk-…HHHH" / "••••1111"
+    location: str          # payload | resource | destination | context
+
+
 class Policy(BaseModel):
     """Machine-readable runtime policy compiled from a user goal."""
 
@@ -157,6 +170,9 @@ class DecisionResult(BaseModel):
     matched_rule: str | None = None
     sensitive_data_detected: bool = False
     secrets: list[SecretMatch] = Field(default_factory=list)
+    # Phase 4: broader sensitive-data findings (redacted) + their categories.
+    sensitive: list[SensitiveMatch] = Field(default_factory=list)
+    sensitive_categories: list[str] = Field(default_factory=list)
     signals: list[Signal] = Field(default_factory=list)
 
     # --- deterministic vs. advisory transparency (Phase 3) ---

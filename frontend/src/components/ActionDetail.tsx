@@ -6,6 +6,7 @@ import { formatDateTime } from "../lib/format";
 // Slide-over detail for one audit event. Sensitive values are never shown —
 // only redacted secret fingerprints the backend already produced.
 export function ActionDetail({ event, onClose }: { event: AuditEvent; onClose: () => void }) {
+  const isExfil = (event.matched_rule ?? "").startsWith("EXFIL");
   return (
     <>
       <div className="overlay" onClick={onClose} />
@@ -18,11 +19,33 @@ export function ActionDetail({ event, onClose }: { event: AuditEvent; onClose: (
           <button className="close-x" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="drawer-body">
-          <div style={{ display: "flex", gap: 10, alignItems: "center", margin: "6px 0 14px" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", margin: "6px 0 14px", flexWrap: "wrap" }}>
             <DecisionBadge decision={event.decision} />
             {event.goal_drift && <span className="badge deny">GOAL DRIFT</span>}
             {event.sensitive_data_detected && <span className="badge ask">SENSITIVE DATA</span>}
+            {isExfil && <span className="badge deny">EXFILTRATION BLOCKED</span>}
           </div>
+
+          {event.sensitive_data_detected && (
+            <>
+              <div className="section-label">Sensitive data</div>
+              <div className="kv"><span className="k">Detected</span><span className="v">DETECTED</span></div>
+              <div className="kv">
+                <span className="k">Categories</span>
+                <span className="v">{event.sensitive_categories.join(", ") || "—"}</span>
+              </div>
+              {isExfil && (
+                <div className="kv"><span className="k">Exfiltration</span>
+                  <span className="v" style={{ color: "var(--deny)", fontWeight: 640 }}>BLOCKED — outbound to external destination</span></div>
+              )}
+              {event.sensitive.map((s, i) => (
+                <div className="kv" key={i}>
+                  <span className="k">{s.category} · {s.subtype}</span>
+                  <span className="v mono">{s.fingerprint} · {s.severity} · {Math.round(s.confidence * 100)}%</span>
+                </div>
+              ))}
+            </>
+          )}
 
           <RiskMeter score={event.risk_score} signals={event.signals} />
 

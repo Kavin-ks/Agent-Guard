@@ -64,8 +64,8 @@ backend/
   agentguard/          # PURE engine (Phase 1) — no I/O, never executes actions
     models.py          # Action, Resource, Policy, Signal, DecisionResult
     gates/             # the 5 deterministic gates
-    detectors/secrets.py
-    paths.py risk.py pipeline.py goal_compiler.py constants.py
+    detectors/         # modular sensitive-data detection: secrets, pii, financial, scan (Phase 4)
+    paths.py risk.py pipeline.py goal_compiler.py fingerprint.py constants.py
   api/                 # HTTP service (Phase 2)
     main.py            # app startup:  uvicorn api.main:app
     config.py          # env-driven settings (pydantic-settings)
@@ -75,9 +75,9 @@ backend/
     store/             # AuditStore/ApprovalStore interfaces + SQLite impl (persistent)
     routes/            # health.py, guard.py, audit.py, approvals.py
   adapter/             # SDK (Phase 6): client, executor (enforcement), registry, approval
-  simulator/           # mock tools + 5-scenario CLI demo (python -m simulator.demo)
-  tests/               # 121 backend tests
-frontend/              # Dashboard (Phase 7): React + TS + Vite, 13 tests
+  simulator/           # mock tools + 6-scenario CLI demo (python -m simulator.demo)
+  tests/               # 146 backend tests
+frontend/              # Dashboard (Phase 7): React + TS + Vite, 14 tests
   src/api/client.ts    # centralized API layer (same-origin /api; key injected by proxy)
   src/pages/           # Dashboard, Approvals, Audit, Live Demo
   src/components/      # pipeline diagram, risk meter, action detail, activity
@@ -411,6 +411,57 @@ npm test        # 13 Vitest + React Testing Library tests
 npm run build   # type-check + production build -> dist/
 ```
 
+## Sensitive-data & exfiltration protection (Phase 4)
+
+Agent Guard detects sensitive information **locally** and prevents an agent from
+leaking it through an unauthorized external action.
+
+**Modular detectors** (`agentguard/detectors/`, not one giant regex file):
+
+| Module | Categories | Technique |
+|--------|-----------|-----------|
+| `secrets.py` | SECRET / AUTHENTICATION — API keys, AWS/GitHub/Slack/Stripe, JWT, private keys, bearer, `key=value` | regex + Shannon entropy |
+| `pii.py` | PII — email, phone, Aadhaar, PAN | regex + **Verhoeff** checksum (Aadhaar) |
+| `financial.py` | FINANCIAL — card numbers, IFSC | regex + **Luhn** checksum (cards) |
+| `scan.py` | unifies all three, confidence-filtered | — |
+
+**Structured, always-redacted findings** — every finding carries
+`{category, subtype, severity (LOW/MEDIUM/HIGH/CRITICAL), confidence, fingerprint, location}`
+and **never** the raw value (`sk-…1234`, `••••1111`). Checksums keep false
+positives low: a random 16-digit string is not a card; a 12-digit number is not
+an Aadhaar unless Verhoeff passes.
+
+**Exfiltration rule** (the `secret_exfil` gate — highest authority): for an
+outbound action to an **external** destination —
+- a protected/secret file, or any **HIGH/CRITICAL** sensitive datum in the payload → **DENY**;
+- **MEDIUM**-only (e.g. a lone email) → **ASK** (nuance: not every sensitive datum is a hard block);
+- reading a secret locally is already denied by the protected-resource gate.
+
+**LLM data-minimization** — the advisor receives only booleans + category labels
+(`payload_contains_sensitive_data`, `sensitive_categories: ["SECRET","PII"]`),
+never the payload or any value. Basic detection is deterministic and local; the
+LLM is never responsible for secret detection.
+
+**Deterministic authority preserved** — an exfiltration DENY can never be
+overridden by the LLM, and an exfiltration DENY **creates no approval** (so there
+is no DENY→APPROVE→EXECUTE path). Enforced end-to-end: `GuardedExecutor` never
+calls the tool on DENY.
+
+**Verified end-to-end** (live, with fake credentials): sending a simulated secret
++ email to `external.example` → `DENY`, `execution=BLOCKED`, no approval, and the
+raw value appears **zero times** in the API response, the audit record, and the
+SQLite file on disk.
+
+```
+SENSITIVE DATA → EXTERNAL ACTION → AGENT GUARD → DENY → TOOL NEVER EXECUTES → REDACTED AUDIT
+```
+
+**Honest limitation:** this is a heuristic defense layer, not a mathematical
+guarantee. Novel/obfuscated encodings, split payloads, or unusual formats can
+evade detection; the deterministic protected-resource, scope, and destination
+gates remain the backstop. Known false positives (a benign email flagged PII →
+ASK on egress) are handled by severity/confidence, not hard blocks.
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
@@ -475,8 +526,8 @@ cd backend
 1. ✅ Engine core (models, gates, risk)
 2. ✅ Action interception API (`/guard/evaluate`, auth, validation)
 3. ✅ Goal-aware intelligence (goal representation, relevance advisor, drift) — **this phase**
-4. Extended risk + sensitive-data detection
-5. ✅ Audit log + approval queue (persistent, human-in-the-loop) — **this phase**
+4. ✅ Sensitive-data detection + exfiltration prevention — **this phase**
+5. ✅ Audit log + approval queue (persistent, human-in-the-loop)
 6. ✅ Agent adapter SDK + execution enforcement + 5-scenario simulator — **this phase**
 7. ✅ Professional React/TS dashboard (real backend integration) — **this phase**
 8. Expanded automated tests

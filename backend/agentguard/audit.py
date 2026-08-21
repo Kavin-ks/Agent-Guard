@@ -20,7 +20,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import SecretMatch, Signal
+from .models import SecretMatch, SensitiveMatch, Signal
 
 
 def _utcnow() -> datetime:
@@ -79,6 +79,9 @@ class AuditEvent(BaseModel):
     payload_present: bool = False
     payload_contains_secret: bool = False
     secrets: list[SecretMatch] = Field(default_factory=list)  # redacted fingerprints only
+    # Phase 4: broader sensitive-data metadata (redacted; never raw values).
+    sensitive_categories: list[str] = Field(default_factory=list)
+    sensitive: list[SensitiveMatch] = Field(default_factory=list)
     signals: list[Signal] = Field(default_factory=list)
 
     # Integrity + workflow

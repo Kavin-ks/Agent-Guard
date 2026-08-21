@@ -26,6 +26,8 @@ export function auditEvent(over: Partial<AuditEvent> = {}): AuditEvent {
     payload_present: false,
     payload_contains_secret: false,
     secrets: [],
+    sensitive: [],
+    sensitive_categories: [],
     signals: [],
     action_fingerprint: "af_abc123",
     approval_status: null,
@@ -61,6 +63,29 @@ export const askDelete = auditEvent({
   approval_status: "PENDING",
   approval_id: "ap_1",
   execution_status: "NOT_EXECUTED",
+});
+
+export const exfilDeny = auditEvent({
+  event_id: "ev_exfil",
+  operation: "transmit",
+  resource: "https://external.example/upload",
+  resource_kind: "url",
+  tool: "send_external_request",
+  destination: "https://external.example/upload",
+  decision: "DENY",
+  deterministic_decision: "DENY",
+  risk_score: 100,
+  reason: "Potential sensitive-data exfiltration detected: outbound payload contains sensitive data (SECRET, PII) being sent to external destination.",
+  matched_rule: "EXFIL::external-sensitive-transmit",
+  execution_status: "BLOCKED",
+  sensitive_data_detected: true,
+  payload_present: true,
+  payload_contains_secret: true,
+  sensitive_categories: ["SECRET", "PII"],
+  sensitive: [
+    { category: "SECRET", subtype: "anthropic_api_key", severity: "HIGH", confidence: 0.95, fingerprint: "sk-…ZZZZ", location: "payload" },
+    { category: "PII", subtype: "email", severity: "MEDIUM", confidence: 0.7, fingerprint: "ali…com", location: "payload" },
+  ],
 });
 
 export function approval(over: Partial<ApprovalRequest> = {}): ApprovalRequest {

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AuditPage } from "../pages/AuditPage";
 import { DemoPage } from "../pages/DemoPage";
 import { ActionDetail } from "../components/ActionDetail";
-import { auditEvent, denyEnv } from "./fixtures";
+import { auditEvent, denyEnv, exfilDeny } from "./fixtures";
 
 vi.mock("../api/client", () => {
   class ApiError extends Error {
@@ -43,6 +43,15 @@ describe("Action detail redaction", () => {
     expect(screen.getByText(/sk-…HHHH/)).toBeInTheDocument();
     // A full-looking secret must never appear.
     expect(screen.queryByText(/sk-ant-api03-[A-Za-z0-9]{10,}/)).toBeNull();
+  });
+
+  it("shows exfiltration blocked + categories, only redacted values", () => {
+    render(<ActionDetail event={exfilDeny} onClose={() => {}} />);
+    expect(screen.getByText("EXFILTRATION BLOCKED")).toBeInTheDocument();
+    expect(screen.getAllByText(/SECRET, PII/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/sk-…ZZZZ/)).toBeInTheDocument();
+    // No raw secret anywhere.
+    expect(screen.queryByText(/ZZZZZZZZZZ/)).toBeNull();
   });
 });
 

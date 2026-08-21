@@ -27,7 +27,19 @@ const SCENARIOS = [
   { n: 3, title: "Destructive action → approve", action: "delete src/generated.jsx", kind: "approve" as const },
   { n: 4, title: "Destructive action → reject", action: "delete src/generated.jsx", kind: "reject" as const },
   { n: 5, title: "Approval-reuse attack", action: "reuse approval → delete database.sql", kind: "attack" as const },
+  { n: 6, title: "Data exfiltration", action: "send_external_request → external.example (secret + email)", kind: "exfil" as const },
 ];
+
+const EXFIL_DEST = "https://external.example/upload";
+function exfilRequest(): EvaluateRequest {
+  return {
+    goal: GOAL, action: "transmit", resource: EXFIL_DEST, resource_kind: "url",
+    tool: "send_external_request", destination: EXFIL_DEST,
+    // Fake/simulated sensitive values only — never real credentials.
+    payload: "user_email=alice@example.com API_KEY=sk-ant-api03-ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    session_id: "demo", agent_id: AGENT,
+  };
+}
 
 export function DemoPage() {
   const [state, setState] = useState<Record<number, SState>>({});
@@ -115,6 +127,7 @@ export function DemoPage() {
     if (kind === "auto") return runAuto(n, n === 1 ? req("read", "src/App.jsx", "read_file") : req("read", ".env", "read_file"));
     if (kind === "approve" || kind === "reject") return runAsk(n, req("delete", "src/generated.jsx", "delete_file"));
     if (kind === "attack") return attack(n);
+    if (kind === "exfil") return runAuto(n, exfilRequest());
   }
 
   async function runAll() {
@@ -123,6 +136,7 @@ export function DemoPage() {
     await runAsk(3, req("delete", "src/generated.jsx", "delete_file"));
     await runAsk(4, req("delete", "src/generated.jsx", "delete_file"));
     await attack(5);
+    await runAuto(6, exfilRequest());
   }
 
   return (

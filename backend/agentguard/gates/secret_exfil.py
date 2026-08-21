@@ -1,20 +1,24 @@
 """
-Secret-exfiltration gate — the highest-authority gate.
+Exfiltration gate — the highest-authority gate.
 
-DENIES any attempt to send a secret to an external destination. Two triggers:
+Blocks sensitive data from leaving through an unauthorized external action. It
+fires only for OUTBOUND operations (transmit/network) to an EXTERNAL destination
+(not on the policy allowlist), and then reasons about what is being sent:
 
-1. The payload being transmitted contains a detected secret, OR
-2. The resource being transmitted is itself a protected/secret file,
+  * a protected/secret file being transmitted, OR
+  * HIGH/CRITICAL sensitive findings in the payload/context (secrets, private
+    keys, cards, government IDs)               -> DENY (exfiltration)
+  * MEDIUM findings only (e.g. a lone email)   -> ASK (human confirmation)
 
-combined with an outbound operation (``transmit``/``network``) to a destination
-that is not on the policy's network allowlist.
-
-Only redacted fingerprints of the secret are ever placed on the signal.
+This means ordinary text with a single email doesn't get hard-blocked, while
+real secret/financial/ID exfiltration is denied outright. Only redacted
+fingerprints ever appear on the emitted signal.
 """
 
 from __future__ import annotations
 
 from ..constants import DEFAULT_PROTECTED_GLOBS
+from ..detectors.scan import categories, has_high_or_critical
 from ..models import Operation, Severity, Signal
 from ..paths import matches_any
 from .base import Gate, GateContext
@@ -46,29 +50,42 @@ class SecretExfilGate(Gate):
         if not _is_external(destination, ctx.policy.network_allowlist):
             return []
 
-        secrets = ctx.payload_secrets
-        resource_is_protected = matches_any(
-            DEFAULT_PROTECTED_GLOBS, action.resource.value
-        )
+        findings = ctx.sensitive
+        resource_is_protected = matches_any(DEFAULT_PROTECTED_GLOBS, action.resource.value)
+        cats = categories(findings)
 
-        if not secrets and not resource_is_protected:
-            return []
-
-        if secrets:
-            kinds = ", ".join(sorted({s.type for s in secrets}))
-            detail = f"payload contains secret material ({kinds})"
-        else:
-            detail = f"the source '{action.resource.value}' is a protected secret file"
-
-        return [
-            Signal(
+        # DENY: protected source file, or any high/critical sensitive datum.
+        if resource_is_protected or has_high_or_critical(findings):
+            detail = (
+                f"the source '{action.resource.value}' is a protected secret file"
+                if resource_is_protected and not findings
+                else f"outbound payload contains sensitive data ({', '.join(cats)})"
+            )
+            return [Signal(
                 gate=self.name,
                 severity=Severity.DENY,
                 risk_points=76,
                 reason=(
                     f"Potential sensitive-data exfiltration detected: {detail} "
-                    f"is being sent to external destination '{destination}'."
+                    f"being sent to external destination '{destination}'."
                 ),
-                rule_id="EXFIL::external-secret-transmit",
-            )
-        ]
+                rule_id="EXFIL::external-sensitive-transmit",
+            )]
+
+        # ASK: medium-severity sensitive data leaving (e.g. a lone email address).
+        # risk_points=0 so this flags/escalates without stacking with the
+        # external-comm gate to falsely reach the DENY band — the nuance the
+        # spec asks for ("do not simply block every action with sensitive data").
+        if findings:
+            return [Signal(
+                gate=self.name,
+                severity=Severity.ASK,
+                risk_points=0,
+                reason=(
+                    f"Outbound communication to '{destination}' contains sensitive data "
+                    f"({', '.join(cats)}); human confirmation required before it leaves."
+                ),
+                rule_id="EXFIL::external-sensitive-ask",
+            )]
+
+        return []

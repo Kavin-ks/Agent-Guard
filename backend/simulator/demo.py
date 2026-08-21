@@ -58,7 +58,7 @@ def main() -> int:
             print()
 
             # Sanity: the security invariants the demo is meant to prove.
-            if result.number in (2, 4, 5) and result.tool_executed:
+            if result.number in (2, 4, 5, 6) and result.tool_executed:
                 blocked_ok = False
             if result.number in (1, 3) and not result.tool_executed:
                 executed_ok = False

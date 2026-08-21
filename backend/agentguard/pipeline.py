@@ -24,6 +24,7 @@ import time
 from typing import Protocol
 
 from .advisors.base import build_advisor_request
+from .detectors.scan import categories
 from .gates import DEFAULT_GATES
 from .gates.base import Gate, GateContext
 from .goal import RelevanceAssessment, RelevanceLevel
@@ -33,6 +34,7 @@ from .models import (
     DecisionResult,
     Policy,
     SecretMatch,
+    SensitiveMatch,
     Severity,
     Signal,
 )
@@ -94,9 +96,17 @@ class Engine:
             SecretMatch(type=f.type, fingerprint=f.fingerprint, entropy=f.entropy)
             for f in ctx.payload_secrets
         ]
+        sensitive = [
+            SensitiveMatch(category=f.category.value, subtype=f.subtype,
+                           severity=f.severity.value, confidence=f.confidence,
+                           fingerprint=f.fingerprint, location=f.location)
+            for f in ctx.sensitive
+        ]
+        sens_cats = categories(ctx.sensitive)
 
         # Deterministic decision — the security authority.
-        det_result = aggregate(action, policy, det_signals, secrets=secrets)
+        det_result = aggregate(action, policy, det_signals, secrets=secrets,
+                               sensitive=sensitive, sensitive_categories=sens_cats)
 
         # Advisory pass.
         assessment: RelevanceAssessment | None = None
@@ -112,7 +122,8 @@ class Engine:
         advisory_signals = _assessment_to_signals(assessment)
         all_signals = det_signals + [_sanitize_advisory(s) for s in advisory_signals]
 
-        final = aggregate(action, policy, all_signals, secrets=secrets)
+        final = aggregate(action, policy, all_signals, secrets=secrets,
+                          sensitive=sensitive, sensitive_categories=sens_cats)
 
         latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
         return final.model_copy(update={

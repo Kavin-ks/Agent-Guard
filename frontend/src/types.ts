@@ -19,6 +19,15 @@ export interface SecretMatch {
   entropy: number;
 }
 
+export interface SensitiveMatch {
+  category: string;   // SECRET | AUTHENTICATION | PII | FINANCIAL | SENSITIVE_FILE
+  subtype: string;
+  severity: string;   // LOW | MEDIUM | HIGH | CRITICAL
+  confidence: number;
+  fingerprint: string; // redacted — never a raw value
+  location: string;
+}
+
 export interface EvaluateResponse {
   decision: Decision;
   risk_score: number;
@@ -26,6 +35,8 @@ export interface EvaluateResponse {
   matched_rule: string | null;
   sensitive_data_detected: boolean;
   secrets: SecretMatch[];
+  sensitive: SensitiveMatch[];
+  sensitive_categories: string[];
   signals: Signal[];
   deterministic_decision: Decision | null;
   goal_relevance: string | null;
@@ -70,6 +81,8 @@ export interface AuditEvent {
   payload_present: boolean;
   payload_contains_secret: boolean;
   secrets: SecretMatch[];
+  sensitive: SensitiveMatch[];
+  sensitive_categories: string[];
   signals: Signal[];
   action_fingerprint: string;
   approval_status: ApprovalStatus | null;

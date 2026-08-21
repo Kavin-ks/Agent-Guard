@@ -108,8 +108,10 @@ class GuardService:
             advisory_available=result.advisory_available,
             sensitive_data_detected=result.sensitive_data_detected,
             payload_present=action.payload is not None,
-            payload_contains_secret=result.sensitive_data_detected,
+            payload_contains_secret=bool(result.secrets),
             secrets=result.secrets,          # redacted fingerprints only
+            sensitive_categories=result.sensitive_categories,
+            sensitive=result.sensitive,      # redacted; never raw values
             signals=result.signals,
             action_fingerprint=fingerprint,
             execution_status=exec_status,

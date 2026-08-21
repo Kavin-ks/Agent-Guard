@@ -52,6 +52,8 @@ def aggregate(
     policy: Policy,
     signals: list[Signal],
     secrets: list[SecretMatch] | None = None,
+    sensitive=None,
+    sensitive_categories: list[str] | None = None,
     latency_ms: float = 0.0,
 ) -> DecisionResult:
     """Combine gate signals into a final, explainable ``DecisionResult``."""
@@ -92,6 +94,8 @@ def aggregate(
     reason, matched_rule = _primary_reason(signals, final)
 
     secrets = secrets or []
+    sensitive = sensitive or []
+    sensitive_categories = sensitive_categories or []
     return DecisionResult(
         action_id=action.action_id,
         session_id=action.session_id,
@@ -99,8 +103,10 @@ def aggregate(
         risk_score=score,
         reason=reason,
         matched_rule=matched_rule,
-        sensitive_data_detected=bool(secrets),
+        sensitive_data_detected=bool(secrets) or bool(sensitive),
         secrets=secrets,
+        sensitive=sensitive,
+        sensitive_categories=sensitive_categories,
         signals=signals,
         # Default: deterministic == final. The pipeline overrides these when an
         # advisory pass runs, so the two decisions can be compared explicitly.

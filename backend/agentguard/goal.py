@@ -59,6 +59,8 @@ class AdvisorRequest(BaseModel):
     destination: str | None = None
     payload_present: bool = False
     payload_contains_secret: bool = False  # boolean only; the value is never sent
+    payload_contains_sensitive_data: bool = False
+    sensitive_categories: list[str] = Field(default_factory=list)  # e.g. ["SECRET","PII"]
     context_keys: list[str] = Field(default_factory=list)
 
 

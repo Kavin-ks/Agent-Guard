@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from ..detectors.scan import categories, scan_text
 from ..detectors.secrets import detect_secrets
 from ..goal import AdvisorRequest, RelevanceAssessment
 from ..models import Action, Policy
@@ -31,6 +32,7 @@ def build_advisor_request(action: Action, policy: Policy) -> AdvisorRequest:
     never include ``action.payload`` text or any secret value.
     """
     payload_secrets = detect_secrets(action.payload)
+    findings = scan_text(action.payload, "payload")
     return AdvisorRequest(
         goal=policy.goal_text,
         operation=action.operation.value,
@@ -40,5 +42,7 @@ def build_advisor_request(action: Action, policy: Policy) -> AdvisorRequest:
         destination=action.destination,
         payload_present=action.payload is not None,
         payload_contains_secret=bool(payload_secrets),
+        payload_contains_sensitive_data=bool(findings),
+        sensitive_categories=categories(findings),  # category labels only, never values
         context_keys=sorted(action.context.keys()) if action.context else [],
     )
