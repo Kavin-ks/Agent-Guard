@@ -124,7 +124,16 @@ class GuardedExecutor:
         payload: str | None = None,
         destination: str | None = None,
         context: dict | None = None,
+        on_ask: str = "handler",
     ) -> ExecutionResult:
+        """Evaluate then enforce. ``on_ask`` controls ASK handling:
+
+        * ``"handler"`` (default): resolve via the approval handler synchronously
+          (used by tests / auto flows).
+        * ``"defer"``: leave the approval PENDING and return an ``ASK`` result with
+          the ``approval_id`` — the caller (e.g. an MCP host) surfaces it to a human
+          and later calls ``execute_with_existing_approval``. The tool is not run.
+        """
         req = self._build_request(tool_name, resource, goal, payload, destination, context)
 
         # 1) Evaluate FIRST. Any failure -> fail closed (tool never called).
@@ -161,6 +170,10 @@ class GuardedExecutor:
                 decision="ASK", executed=False, authorized=False,
                 execution_status="BLOCKED", event_id=event_id, approval_id=approval_id, risk_score=risk,
             )
+            if on_ask == "defer":
+                # Leave the approval PENDING for a human; do not run the tool.
+                base.reason = decision.get("reason", "human approval required before execution")
+                return base
             try:
                 approve = self._approval.resolve(decision)
             except Exception as exc:  # a broken handler must not open the gate

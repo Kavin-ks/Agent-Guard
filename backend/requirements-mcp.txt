@@ -1,0 +1,5 @@
+# Optional — only needed to RUN the Agent Guard MCP server (not for the core
+# engine/API or the test suite). Install with:  pip install -r requirements-mcp.txt
+-r requirements.txt
+fastmcp>=3.0
+mcp>=1.0

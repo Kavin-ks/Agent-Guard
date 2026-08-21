@@ -4,6 +4,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { DemoPage } from "./pages/DemoPage";
+import { IntegrationPage } from "./pages/IntegrationPage";
 
 const router = createBrowserRouter([
   {
@@ -13,6 +14,7 @@ const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: "approvals", element: <ApprovalsPage /> },
       { path: "audit", element: <AuditPage /> },
+      { path: "integration", element: <IntegrationPage /> },
       { path: "demo", element: <DemoPage /> },
     ],
   },

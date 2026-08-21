@@ -6,6 +6,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: "▦", end: true },
   { to: "/approvals", label: "Approval Queue", icon: "⚑", end: false },
   { to: "/audit", label: "Audit Log", icon: "▤", end: false },
+  { to: "/integration", label: "Integration", icon: "⇄", end: false },
   { to: "/demo", label: "Live Demo", icon: "▷", end: false },
 ];
 
@@ -13,7 +14,8 @@ const TITLES: Record<string, { t: string; s: string }> = {
   "/": { t: "Runtime Security Monitor", s: "Live evaluation of every agent action" },
   "/approvals": { t: "Approval Queue", s: "Human-in-the-loop review of ASK decisions" },
   "/audit": { t: "Audit Log", s: "Complete, redacted record of every decision" },
-  "/demo": { t: "Live Demo", s: "Five scenarios against the real Agent Guard backend" },
+  "/integration": { t: "Agent & IDE Integration", s: "Connect MCP-capable agents through Agent Guard" },
+  "/demo": { t: "Live Demo", s: "Scenarios run against the real Agent Guard backend" },
 };
 
 export function Layout() {

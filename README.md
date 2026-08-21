@@ -78,9 +78,10 @@ backend/
   simulator/           # mock tools + 6-scenario CLI demo (python -m simulator.demo)
   examples/            # integration example (wrap an existing tool)
   benchmark/           # evaluation latency benchmark
-  tests/               # 171 backend tests
+  mcp_server/          # MCP integration: guarded tools over Model Context Protocol (Phase 10)
+  tests/               # 180 backend tests
   Dockerfile           # backend + frontend images (Phase 9)
-frontend/              # Dashboard (Phase 7): React + TS + Vite, 14 tests
+frontend/              # Dashboard (light-theme, Phase 7+10): React + TS + Vite, 16 tests
   src/api/client.ts    # centralized API layer (same-origin /api; key injected by proxy)
   src/pages/           # Dashboard, Approvals, Audit, Live Demo
   src/components/      # pipeline diagram, risk meter, action detail, activity
@@ -562,6 +563,41 @@ the security-critical path — are sub-millisecond.)
 - Detection is heuristic (see Phase 4 limitations); the deterministic gates are
   the backstop.
 
+## Agent & IDE integration via MCP (Phase 10)
+
+Any MCP-capable IDE/agent (e.g. Claude Code) can connect its tools to the **Agent
+Guard MCP server** (`backend/mcp_server/`). Every tool call is routed through the
+existing `GuardedExecutor` → Agent Guard engine **before** it executes — no
+security logic is duplicated. Guarded tools exposed over MCP: `guarded_read_file`,
+`guarded_write_file`, `guarded_delete_file`, `guarded_run_command`,
+`guarded_http_request`, plus `set_goal` and `agentguard_resume`.
+
+**Flow:** `ALLOW` → the tool runs once. `DENY` → the tool never runs. `ASK` → the
+call returns an `approval_id` and leaves a PENDING approval; a human approves in
+the dashboard, then the agent calls `agentguard_resume` with the same arguments —
+Agent Guard **re-verifies the fingerprint** before the tool runs.
+
+**Setup (Claude Code):**
+```bash
+pip install -r backend/requirements-mcp.txt         # fastmcp + mcp
+# copy deploy/claude_code_mcp.json into your project's .mcp.json and fill in:
+#   AGENTGUARD_URL, AGENTGUARD_API_KEY, AGENTGUARD_WORKSPACE, AGENTGUARD_GOAL
+```
+The server runs as `python -m mcp_server` (stdio). The **Integration** page in the
+dashboard shows connected agents, MCP status, connection instructions, and recent
+guarded calls.
+
+**Generic path (any agent):** use the SDK (`GuardedExecutor` — see
+`examples/wrap_existing_tool.py`) or call `POST /guard/evaluate` directly and honor
+the decision. The deterministic engine remains the sole authority.
+
+**Trust boundary (unchanged, honest):** Agent Guard governs tool calls made
+**through** the MCP server or SDK. It does not, and cannot, silently intercept an
+IDE's own internal tools — the agent must connect its tools to Agent Guard.
+
+> **UI:** the dashboard is a light-theme enterprise console (Dashboard, Approval
+> Queue, Audit Log, Integration, Live Demo) — all fed by the real backend.
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
@@ -631,4 +667,5 @@ cd backend
 6. ✅ Agent adapter SDK + execution enforcement + 5-scenario simulator — **this phase**
 7. ✅ Professional React/TS dashboard (real backend integration) — **this phase**
 8. Expanded automated tests
-9. ✅ Docker Compose one-command deployment + demo packaging — **this phase**
+9. ✅ Docker Compose one-command deployment + demo packaging
+10. ✅ Real MCP agent/IDE integration + light-theme production UI — **this phase**

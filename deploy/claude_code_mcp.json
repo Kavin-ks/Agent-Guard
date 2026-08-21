@@ -1,0 +1,17 @@
+{
+  "//": "Agent Guard MCP server for Claude Code (or any MCP-capable IDE/agent).",
+  "//setup": "1) start the backend (uvicorn or docker compose). 2) copy this into your project's .mcp.json (or run `claude mcp add`). 3) set the absolute paths, the API key (same as the backend's AGENTGUARD_API_KEY), the workspace root, and the session goal.",
+  "mcpServers": {
+    "agent-guard": {
+      "command": "/ABSOLUTE/PATH/TO/Agent-Guard/backend/.venv/bin/python",
+      "args": ["-m", "mcp_server"],
+      "cwd": "/ABSOLUTE/PATH/TO/Agent-Guard/backend",
+      "env": {
+        "AGENTGUARD_URL": "http://127.0.0.1:8000",
+        "AGENTGUARD_API_KEY": "REPLACE_WITH_BACKEND_API_KEY",
+        "AGENTGUARD_WORKSPACE": "/ABSOLUTE/PATH/TO/your/project",
+        "AGENTGUARD_GOAL": "Build a React frontend. Do not modify backend or database, and never access secrets."
+      }
+    }
+  }
+}
