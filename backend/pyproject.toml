@@ -1,0 +1,10 @@
+[project]
+name = "agent-guard"
+version = "0.1.0"
+description = "Runtime Goal-Aware Authorization Firewall for Autonomous AI Agents"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]

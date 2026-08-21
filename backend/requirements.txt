@@ -1,0 +1,13 @@
+# Core engine
+pydantic>=2.6,<3
+
+# API layer (used from Phase 2 onward)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic-settings>=2.2
+
+# LLM goal reasoning (Phase 3)
+anthropic>=0.40
+
+# Optional persistence adapter
+pymongo>=4.6

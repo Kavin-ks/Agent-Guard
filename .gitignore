@@ -1,0 +1,41 @@
+# --- Secrets: never commit these ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials/
+secrets/
+service-account*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- Node / frontend (later phases) ---
+node_modules/
+dist/
+build/
+.vite/
+*.local
+
+# --- Runtime data ---
+*.log
+audit-*.jsonl
+data/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
