@@ -1,0 +1,92 @@
+import type { ApprovalRequest, AuditEvent } from "../types";
+
+export function auditEvent(over: Partial<AuditEvent> = {}): AuditEvent {
+  return {
+    event_id: "ev_test1",
+    created_at: "2026-08-21T10:42:18Z",
+    action_id: "a1",
+    session_id: "demo",
+    agent_id: "Coding Agent",
+    operation: "read",
+    resource: "src/App.jsx",
+    resource_kind: "file",
+    tool: "read_file",
+    destination: null,
+    goal_text: "Build a React frontend",
+    context_keys: [],
+    decision: "ALLOW",
+    deterministic_decision: "ALLOW",
+    risk_score: 8,
+    reason: "Action is within the authorized goal scope and assessed as low risk.",
+    matched_rule: null,
+    goal_relevance: "HIGH",
+    goal_drift: false,
+    advisory_available: true,
+    sensitive_data_detected: false,
+    payload_present: false,
+    payload_contains_secret: false,
+    secrets: [],
+    signals: [],
+    action_fingerprint: "af_abc123",
+    approval_status: null,
+    approval_id: null,
+    execution_status: "REPORTED_EXECUTED",
+    ...over,
+  };
+}
+
+export const denyEnv = auditEvent({
+  event_id: "ev_env",
+  operation: "read",
+  resource: ".env",
+  decision: "DENY",
+  deterministic_decision: "DENY",
+  risk_score: 94,
+  reason: "Access to protected resource '.env' is not authorized and may expose sensitive credentials or secrets.",
+  matched_rule: "PR::**/.env",
+  execution_status: "BLOCKED",
+  signals: [{ gate: "protected_resource", severity: "deny", risk_points: 86,
+    reason: "Access to protected resource '.env' is not authorized...", rule_id: "PR::**/.env", advisory: false }],
+});
+
+export const askDelete = auditEvent({
+  event_id: "ev_del",
+  operation: "delete",
+  resource: "src/generated.jsx",
+  decision: "ASK",
+  deterministic_decision: "ASK",
+  risk_score: 60,
+  reason: "Destructive or irreversible action detected; human approval is required.",
+  matched_rule: "DESTRUCTIVE::approval-required",
+  approval_status: "PENDING",
+  approval_id: "ap_1",
+  execution_status: "NOT_EXECUTED",
+});
+
+export function approval(over: Partial<ApprovalRequest> = {}): ApprovalRequest {
+  return {
+    approval_id: "ap_1",
+    event_id: "ev_del",
+    action_id: "a1",
+    session_id: "demo",
+    created_at: "2026-08-21T10:42:25Z",
+    expires_at: null,
+    resolved_at: null,
+    operation: "delete",
+    resource: "src/generated.jsx",
+    tool: "delete_file",
+    destination: null,
+    goal_text: "Build a React frontend",
+    reason: "Destructive or irreversible action detected; human approval is required.",
+    risk_score: 60,
+    goal_relevance: "HIGH",
+    goal_drift: false,
+    signals: [],
+    action_fingerprint: "af_abc123",
+    status: "PENDING",
+    approver: null,
+    consumed: false,
+    consumed_at: null,
+    ...over,
+  };
+}

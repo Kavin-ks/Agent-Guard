@@ -76,7 +76,11 @@ backend/
     routes/            # health.py, guard.py, audit.py, approvals.py
   adapter/             # SDK (Phase 6): client, executor (enforcement), registry, approval
   simulator/           # mock tools + 5-scenario CLI demo (python -m simulator.demo)
-  tests/               # 121 tests (engine + API + relevance + audit/approvals + SDK)
+  tests/               # 121 backend tests
+frontend/              # Dashboard (Phase 7): React + TS + Vite, 13 tests
+  src/api/client.ts    # centralized API layer (same-origin /api; key injected by proxy)
+  src/pages/           # Dashboard, Approvals, Audit, Live Demo
+  src/components/      # pipeline diagram, risk meter, action detail, activity
 ```
 
 ## 3. Install
@@ -358,6 +362,55 @@ cd backend
 | 4 | `delete src/generated.jsx` → reject | ASK | **not executed** | rejection blocks |
 | 5 | reuse approval → `delete database.sql` | **refused** | **not executed** | fingerprint integrity |
 
+## Dashboard (Phase 7)
+
+A professional React + TypeScript + Vite security console in `frontend/`. It is a
+**visualization/control layer only** — it holds no authorization logic and treats
+backend state as authoritative. Four pages:
+
+- **Dashboard** — summary stats (Total / Allowed / Awaiting Approval / Blocked /
+  High Risk), a live auto-refreshing activity stream, the Agent→Guard→Decision
+  pipeline, and the goal-awareness panel. Click any row for a full redacted detail.
+- **Approval Queue** — pending ASK cards with **Approve / Reject** that call the
+  real backend (never simulated in React).
+- **Audit Log** — filter by decision / risk / goal-drift, paginated, click-through detail.
+- **Live Demo** — runs the five scenarios against the real API; the browser acts
+  as the agent adapter (evaluate → approve → fingerprint-verified consume) and
+  only reports execution after authorization.
+
+### Run the dashboard
+
+```bash
+# 1) backend (terminal A)
+cd backend
+AGENTGUARD_API_KEY=demo-key AGENTGUARD_ADVISOR=heuristic \
+  .venv/bin/uvicorn api.main:app --port 8000
+
+# 2) frontend (terminal B)
+cd frontend
+npm install
+cp .env.example .env      # set AGENTGUARD_API_KEY to match the backend
+AGENTGUARD_API_KEY=demo-key npm run dev   # http://localhost:5173
+```
+
+### API key handling (no secret in the browser)
+
+The browser bundle **never** contains the API key. In dev, the Vite proxy
+(`vite.config.ts`) forwards `/api/*` to the backend and injects the `X-API-Key`
+header **server-side** from `AGENTGUARD_API_KEY` (a Node-process env var, not a
+`VITE_`-prefixed one, so it is never bundled). In production, a reverse proxy /
+BFF performs the same injection. The frontend only ever calls same-origin `/api`.
+Verified: a POST through the proxy with no client-side key still returns a real
+`DENY` from the backend.
+
+### Frontend tests / build
+
+```bash
+cd frontend
+npm test        # 13 Vitest + React Testing Library tests
+npm run build   # type-check + production build -> dist/
+```
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret
@@ -425,6 +478,6 @@ cd backend
 4. Extended risk + sensitive-data detection
 5. ✅ Audit log + approval queue (persistent, human-in-the-loop) — **this phase**
 6. ✅ Agent adapter SDK + execution enforcement + 5-scenario simulator — **this phase**
-7. Professional React/TS dashboard
+7. ✅ Professional React/TS dashboard (real backend integration) — **this phase**
 8. Expanded automated tests
 9. Docker / deployment / docs
