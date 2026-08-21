@@ -79,11 +79,37 @@ backend/
   examples/            # integration example (wrap an existing tool)
   benchmark/           # evaluation latency benchmark
   tests/               # 171 backend tests
+  Dockerfile           # backend + frontend images (Phase 9)
 frontend/              # Dashboard (Phase 7): React + TS + Vite, 14 tests
   src/api/client.ts    # centralized API layer (same-origin /api; key injected by proxy)
   src/pages/           # Dashboard, Approvals, Audit, Live Demo
   src/components/      # pipeline diagram, risk meter, action detail, activity
 ```
+
+## Quick start — Docker (one command)
+
+The whole stack (backend + dashboard + reverse proxy) runs with one command. The
+nginx proxy serves the dashboard and forwards `/api/*` to the backend, injecting
+the `X-API-Key` header **server-side** — the browser never sees the key.
+
+```bash
+git clone https://github.com/Kavin-ks/Agent-Guard.git
+cd Agent-Guard
+cp deploy/production.env.example deploy/production.env   # set AGENTGUARD_API_KEY (gitignored)
+docker compose up --build                                # → http://localhost:8080
+```
+
+Then verify the full flow end-to-end (the client sends **no** API key — the proxy injects it):
+
+```bash
+deploy/demo_check.sh            # ALLOW→execute · DENY→blocked · ASK→approve→execute ·
+                                # exfiltration→blocked · approval-reuse→blocked
+```
+
+The audit trail persists in the `agentguard-data` volume across restarts. Set
+`ANTHROPIC_API_KEY` in `deploy/production.env` to enable the Claude advisor
+(otherwise the offline heuristic is used). For local development without Docker,
+use the manual setup below.
 
 ## 3. Install
 
@@ -605,4 +631,4 @@ cd backend
 6. ✅ Agent adapter SDK + execution enforcement + 5-scenario simulator — **this phase**
 7. ✅ Professional React/TS dashboard (real backend integration) — **this phase**
 8. Expanded automated tests
-9. Docker / deployment / docs
+9. ✅ Docker Compose one-command deployment + demo packaging — **this phase**

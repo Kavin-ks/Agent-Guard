@@ -1,0 +1,34 @@
+# Reverse proxy: serve the SPA and forward /api/* to the backend, injecting the
+# API key server-side. The browser never sees AGENTGUARD_API_KEY.
+#
+# envsubst (run by the nginx image entrypoint) replaces ${AGENTGUARD_API_KEY} and
+# ${BACKEND_URL} from the environment; nginx runtime vars ($host, $uri, ...) are
+# preserved because they are not defined as environment variables.
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Reasonable upload ceiling (mirrors the backend body-size limit).
+    client_max_body_size 4m;
+
+    # SPA routing: unknown paths fall back to index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API proxy with server-side key injection. Trailing slashes strip the
+    # /api prefix: /api/guard/evaluate -> ${BACKEND_URL}/guard/evaluate.
+    location /api/ {
+        proxy_pass ${BACKEND_URL}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-API-Key "${AGENTGUARD_API_KEY}";
+        proxy_read_timeout 30s;
+    }
+}

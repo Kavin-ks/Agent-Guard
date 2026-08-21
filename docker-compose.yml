@@ -1,0 +1,34 @@
+# Agent Guard — full stack, one command:  docker compose up --build
+#
+#   web (nginx)  →  serves the dashboard + proxies /api/* to backend
+#                   and injects X-API-Key server-side (never in the browser)
+#   backend      →  FastAPI engine + audit/approval store on a persistent volume
+#
+# Configure secrets in ./deploy/production.env (copy from production.env.example).
+
+services:
+  backend:
+    build: ./backend
+    env_file: ./deploy/production.env
+    environment:
+      AGENTGUARD_DB_PATH: /data/agentguard.db
+    volumes:
+      - agentguard-data:/data          # audit trail survives restarts
+    expose:
+      - "8000"                          # internal only; not published to the host
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    env_file: ./deploy/production.env   # provides AGENTGUARD_API_KEY for injection
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy      # wait for the backend health check
+    ports:
+      - "8080:80"                        # open http://localhost:8080
+    restart: unless-stopped
+
+volumes:
+  agentguard-data:
