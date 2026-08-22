@@ -57,8 +57,11 @@ def main() -> None:
 
     @mcp.tool
     def guarded_read_file(path: str, prompt: str = "") -> str:
-        """Read a file — Agent Guard authorizes the read before it happens.
-        Pass `prompt` = the user instruction that triggered this, for the audit trail."""
+        """Read a SINGLE file — Agent Guard authorizes the read before it happens.
+        IMPORTANT: to read MULTIPLE files, call `guarded_read_files` with all paths
+        at once instead of calling this tool repeatedly — that keeps it to one
+        approval instead of one per file. Pass `prompt` = the user instruction that
+        triggered this, for the audit trail."""
         return provider.read_file(path, prompt=prompt or None).as_text()
 
     @mcp.tool
