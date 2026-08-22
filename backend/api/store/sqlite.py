@@ -18,9 +18,9 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from agentguard.audit import ApprovalRequest, AuditEvent
+from agentguard.audit import AgentSession, ApprovalRequest, AuditEvent
 
-from .base import ApprovalStore, AuditStore
+from .base import ApprovalStore, AuditStore, SessionStore
 
 _LOCK = threading.RLock()
 
@@ -39,6 +39,11 @@ def _connect(path: str) -> sqlite3.Connection:
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
+
+
+def _now() -> datetime:
+    from datetime import timezone
+    return datetime.now(timezone.utc)
 
 
 class SqliteAuditStore(AuditStore):
@@ -62,6 +67,7 @@ class SqliteAuditStore(AuditStore):
                     approval_status TEXT,
                     execution_status TEXT,
                     action_fingerprint TEXT,
+                    source TEXT,
                     data TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_events(created_at);
@@ -72,6 +78,11 @@ class SqliteAuditStore(AuditStore):
                 CREATE INDEX IF NOT EXISTS idx_audit_appr ON audit_events(approval_status);
                 """
             )
+            # Migrate pre-existing DBs that lack the source column BEFORE indexing it.
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(audit_events)")}
+            if "source" not in cols:
+                self._conn.execute("ALTER TABLE audit_events ADD COLUMN source TEXT")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_source ON audit_events(source)")
             self._conn.commit()
 
     def add(self, event: AuditEvent) -> None:
@@ -80,13 +91,13 @@ class SqliteAuditStore(AuditStore):
                 """INSERT OR REPLACE INTO audit_events
                    (event_id, created_at, action_id, session_id, decision, risk_score,
                     resource, goal_drift, approval_status, execution_status,
-                    action_fingerprint, data)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    action_fingerprint, source, data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     event.event_id, event.created_at.isoformat(), event.action_id,
                     event.session_id, event.decision, event.risk_score, event.resource,
                     1 if event.goal_drift else 0, event.approval_status,
-                    event.execution_status, event.action_fingerprint,
+                    event.execution_status, event.action_fingerprint, event.source,
                     event.model_dump_json(),
                 ),
             )
@@ -99,12 +110,16 @@ class SqliteAuditStore(AuditStore):
         return AuditEvent.model_validate_json(row["data"]) if row else None
 
     def _where(self, decision, session_id, resource_contains, min_risk, goal_drift,
-               approval_status, since, until):
+               approval_status, since, until, source=None, exclude_source=None):
         clauses, params = [], []
         if decision:
             clauses.append("decision=?"); params.append(decision)
         if session_id:
             clauses.append("session_id=?"); params.append(session_id)
+        if source:
+            clauses.append("source=?"); params.append(source)
+        if exclude_source:
+            clauses.append("(source IS NULL OR source<>?)"); params.append(exclude_source)
         if resource_contains:
             clauses.append("resource LIKE ?"); params.append(f"%{resource_contains}%")
         if min_risk is not None:
@@ -120,22 +135,24 @@ class SqliteAuditStore(AuditStore):
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         return where, params
 
-    def list(self, *, decision=None, session_id=None, resource_contains=None,
-             min_risk=None, goal_drift=None, approval_status=None, since=None,
-             until=None, limit=50, offset=0) -> list[AuditEvent]:
+    def list(self, *, decision=None, session_id=None, source=None, exclude_source=None,
+             resource_contains=None, min_risk=None, goal_drift=None, approval_status=None,
+             since=None, until=None, limit=50, offset=0) -> list[AuditEvent]:
         where, params = self._where(decision, session_id, resource_contains, min_risk,
-                                    goal_drift, approval_status, since, until)
+                                    goal_drift, approval_status, since, until,
+                                    source, exclude_source)
         rows = self._conn.execute(
             f"SELECT data FROM audit_events{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (*params, limit, offset),
         ).fetchall()
         return [AuditEvent.model_validate_json(r["data"]) for r in rows]
 
-    def count(self, *, decision=None, session_id=None, resource_contains=None,
-              min_risk=None, goal_drift=None, approval_status=None, since=None,
-              until=None) -> int:
+    def count(self, *, decision=None, session_id=None, source=None, exclude_source=None,
+              resource_contains=None, min_risk=None, goal_drift=None, approval_status=None,
+              since=None, until=None) -> int:
         where, params = self._where(decision, session_id, resource_contains, min_risk,
-                                    goal_drift, approval_status, since, until)
+                                    goal_drift, approval_status, since, until,
+                                    source, exclude_source)
         row = self._conn.execute(
             f"SELECT COUNT(*) AS n FROM audit_events{where}", params
         ).fetchone()
@@ -214,3 +231,63 @@ class SqliteApprovalStore(ApprovalStore):
 
     def update(self, approval: ApprovalRequest) -> None:
         self.add(approval)  # INSERT OR REPLACE
+
+
+class SqliteSessionStore(SessionStore):
+    """Registry of connected agent sessions (real agents, not demo)."""
+
+    def __init__(self, path: str) -> None:
+        self._conn = _connect(path)
+        self._init()
+
+    def _init(self) -> None:
+        with _LOCK:
+            self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS agent_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    last_seen TEXT NOT NULL,
+                    data TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_sess_seen ON agent_sessions(last_seen);
+                """
+            )
+            self._conn.commit()
+
+    def get(self, session_id: str) -> AgentSession | None:
+        row = self._conn.execute(
+            "SELECT data FROM agent_sessions WHERE session_id=?", (session_id,)
+        ).fetchone()
+        return AgentSession.model_validate_json(row["data"]) if row else None
+
+    def upsert(self, session: AgentSession) -> None:
+        with _LOCK:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO agent_sessions (session_id, last_seen, data) VALUES (?,?,?)",
+                (session.session_id, session.last_seen.isoformat(), session.model_dump_json()),
+            )
+            self._conn.commit()
+
+    def record_call(self, session_id, agent_name, source, decision) -> AgentSession:
+        with _LOCK:
+            s = self.get(session_id) or AgentSession(
+                session_id=session_id, agent_name=agent_name, source=source)
+            s.agent_name = agent_name or s.agent_name
+            s.source = source or s.source
+            s.last_seen = _now()
+            s.calls += 1
+            s.last_decision = decision
+            if decision == "ALLOW":
+                s.allowed += 1
+            elif decision == "ASK":
+                s.asked += 1
+            elif decision == "DENY":
+                s.denied += 1
+            self.upsert(s)
+            return s
+
+    def list(self, *, limit: int = 100) -> list[AgentSession]:
+        rows = self._conn.execute(
+            "SELECT data FROM agent_sessions ORDER BY last_seen DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [AgentSession.model_validate_json(r["data"]) for r in rows]

@@ -1,12 +1,23 @@
-import type { ApprovalRequest, AuditEvent } from "../types";
+import type { AgentOut, ApprovalRequest, AuditEvent } from "../types";
+
+export function agent(over: Partial<AgentOut> = {}): AgentOut {
+  return {
+    session_id: "mcp-1", agent_name: "Antigravity", source: "agent",
+    status: "connected", connected_at: "2026-08-22T20:40:00Z",
+    last_seen: "2026-08-22T20:41:12Z", calls: 3, allowed: 2, asked: 0, denied: 1,
+    last_decision: "ALLOW", ...over,
+  };
+}
 
 export function auditEvent(over: Partial<AuditEvent> = {}): AuditEvent {
   return {
     event_id: "ev_test1",
     created_at: "2026-08-21T10:42:18Z",
     action_id: "a1",
-    session_id: "demo",
-    agent_id: "Coding Agent",
+    session_id: "mcp-1",
+    agent_id: "Antigravity",
+    source: "agent",
+    prompt: "",
     operation: "read",
     resource: "src/App.jsx",
     resource_kind: "file",

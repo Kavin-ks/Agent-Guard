@@ -24,7 +24,7 @@ from .middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from .routes import approvals, audit, guard, health
+from .routes import agents, approvals, audit, guard, health
 
 logger = logging.getLogger("agentguard.api")
 
@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(guard.router)
     app.include_router(audit.router)
     app.include_router(approvals.router)
+    app.include_router(agents.router)
 
     if not settings.api_key:
         logger.warning(

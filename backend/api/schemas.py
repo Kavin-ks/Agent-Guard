@@ -55,6 +55,10 @@ class EvaluateRequest(BaseModel):
     context: dict = Field(default_factory=dict)
     session_id: str = Field(default="default", min_length=1, max_length=256)
     agent_id: str = Field(default="unknown-agent", max_length=256)
+    # Origin: "agent" (real MCP/SDK agent), "demo" (Live Demo page), "sdk", "system".
+    source: str = Field(default="sdk", max_length=32)
+    # The user prompt/instruction (redacted server-side before it is stored).
+    prompt: str | None = Field(default=None, max_length=4000)
     policy: PolicyOverride | None = None
 
 
@@ -123,6 +127,8 @@ class EvaluateResponse(BaseModel):
     approval_required: bool = False        # True only when decision == ASK
     approval_id: str | None = None
     execution_status: str
+    source: str = "sdk"
+    prompt: str = ""                       # redacted
     execution_note: str = EXECUTION_NOTE
 
     policy: AppliedPolicy
@@ -165,6 +171,27 @@ class ApprovalListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class RegisterAgentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: str = Field(..., min_length=1, max_length=256)
+    agent_name: str = Field(default="agent", max_length=128)
+    source: str = Field(default="agent", max_length=32)
+
+
+class AgentOut(BaseModel):
+    session_id: str
+    agent_name: str
+    source: str
+    status: str            # connected | disconnected
+    connected_at: str
+    last_seen: str
+    calls: int
+    allowed: int
+    asked: int
+    denied: int
+    last_decision: str | None = None
 
 
 class HealthResponse(BaseModel):

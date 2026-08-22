@@ -66,38 +66,57 @@ class GuardedToolProvider:
         workspace: str,
         goal: str = "",
         session_id: str = "mcp",
-        agent_id: str = "mcp-agent",
+        agent_id: str = "Antigravity",
+        register: bool = True,
     ) -> None:
         self.ws = Workspace(workspace)
+        self._client = client
+        self.session_id = session_id
+        self.agent_name = agent_id
         self._executor = GuardedExecutor(
-            client, build_registry(self.ws), session_id=session_id, agent_id=agent_id
+            client, build_registry(self.ws), session_id=session_id,
+            agent_id=agent_id, source="agent",
         )
         self.goal = goal or "Assist with the current task within the authorized scope."
+        # Register the connected session once (reused for the whole connection).
+        if register:
+            try:
+                client.register_agent(session_id, agent_id, "agent")
+            except Exception:  # backend not reachable yet -> recorded on first call
+                pass
 
     def set_goal(self, goal: str) -> str:
         self.goal = goal
         return f"Session goal set. Agent Guard will evaluate every tool call against: {goal!r}"
 
     # -- guarded tool calls (ALLOW executes, DENY blocks, ASK defers) -------
-    def _guarded(self, tool: str, resource: str, payload=None, destination=None) -> ToolResult:
+    def _guarded(self, tool: str, resource: str, payload=None, destination=None,
+                 prompt: str | None = None) -> ToolResult:
         r = self._executor.execute(tool, resource, goal=self.goal, payload=payload,
-                                   destination=destination, on_ask="defer")
+                                   destination=destination, on_ask="defer", prompt=prompt)
         return _from_execution(r)
 
-    def read_file(self, path: str) -> ToolResult:
-        return self._guarded("read_file", path)
+    def read_file(self, path: str, prompt: str | None = None) -> ToolResult:
+        return self._guarded("read_file", path, prompt=prompt)
 
-    def write_file(self, path: str, content: str) -> ToolResult:
-        return self._guarded("write_file", path, payload=content)
+    def read_files(self, paths: list[str], prompt: str | None = None) -> list[ToolResult]:
+        """Batch several reads through ONE MCP call. Each path is still evaluated
+        individually by Agent Guard (a secret file in the batch is still denied),
+        but the agent makes one tool invocation instead of N — reducing the
+        number of IDE permission prompts for safe reads."""
+        return [self._guarded("read_file", p, prompt=prompt) for p in paths]
 
-    def delete_file(self, path: str) -> ToolResult:
-        return self._guarded("delete_file", path)
+    def write_file(self, path: str, content: str, prompt: str | None = None) -> ToolResult:
+        return self._guarded("write_file", path, payload=content, prompt=prompt)
 
-    def run_command(self, command: str) -> ToolResult:
-        return self._guarded("run_command", command, payload=command)
+    def delete_file(self, path: str, prompt: str | None = None) -> ToolResult:
+        return self._guarded("delete_file", path, prompt=prompt)
 
-    def http_request(self, url: str, body: str | None = None) -> ToolResult:
-        return self._guarded("http_request", url, payload=body, destination=url)
+    def run_command(self, command: str, prompt: str | None = None) -> ToolResult:
+        return self._guarded("run_command", command, payload=command, prompt=prompt)
+
+    def http_request(self, url: str, body: str | None = None, prompt: str | None = None) -> ToolResult:
+        return self._guarded("http_request", url, payload=body, destination=url, prompt=prompt)
 
     # -- resume an approved ASK (fingerprint re-verified by the backend) ----
     def resume(self, approval_id: str, tool: str, resource: str,

@@ -53,6 +53,7 @@ class GuardedExecutor:
         session_id: str = "sim-agent",
         agent_id: str = "sim-agent",
         approver: str = "human",
+        source: str = "sdk",
     ) -> None:
         self._client = client
         self._registry = registry
@@ -60,9 +61,11 @@ class GuardedExecutor:
         self._session_id = session_id
         self._agent_id = agent_id
         self._approver = approver
+        self._source = source
 
     # -- request construction ---------------------------------------------
-    def _build_request(self, tool_name, resource, goal, payload, destination, context) -> dict:
+    def _build_request(self, tool_name, resource, goal, payload, destination, context,
+                       prompt=None) -> dict:
         tool = self._registry.get(tool_name)
         req = {
             "goal": goal,
@@ -72,6 +75,7 @@ class GuardedExecutor:
             "tool": tool.name,
             "session_id": self._session_id,
             "agent_id": self._agent_id,
+            "source": self._source,
         }
         if payload is not None:
             req["payload"] = payload
@@ -79,6 +83,8 @@ class GuardedExecutor:
             req["destination"] = destination
         if context is not None:
             req["context"] = context
+        if prompt is not None:
+            req["prompt"] = prompt
         return req
 
     # -- tool invocation (the ONLY place a tool is called) ----------------
@@ -125,6 +131,7 @@ class GuardedExecutor:
         destination: str | None = None,
         context: dict | None = None,
         on_ask: str = "handler",
+        prompt: str | None = None,
     ) -> ExecutionResult:
         """Evaluate then enforce. ``on_ask`` controls ASK handling:
 
@@ -134,7 +141,7 @@ class GuardedExecutor:
           the ``approval_id`` — the caller (e.g. an MCP host) surfaces it to a human
           and later calls ``execute_with_existing_approval``. The tool is not run.
         """
-        req = self._build_request(tool_name, resource, goal, payload, destination, context)
+        req = self._build_request(tool_name, resource, goal, payload, destination, context, prompt)
 
         # 1) Evaluate FIRST. Any failure -> fail closed (tool never called).
         try:

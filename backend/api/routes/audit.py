@@ -21,6 +21,8 @@ def list_audit(
     service: GuardService = Depends(get_service),
     decision: str | None = Query(None, pattern="^(ALLOW|ASK|DENY)$"),
     session_id: str | None = None,
+    source: str | None = Query(None, description="only this origin: agent|demo|sdk"),
+    exclude_source: str | None = Query(None, description="exclude this origin (e.g. demo)"),
     resource_contains: str | None = None,
     min_risk: int | None = Query(None, ge=0, le=100),
     goal_drift: bool | None = None,
@@ -31,9 +33,9 @@ def list_audit(
     offset: int = Query(0, ge=0),
 ) -> AuditListResponse:
     items, total = service.list_events(
-        decision=decision, session_id=session_id, resource_contains=resource_contains,
-        min_risk=min_risk, goal_drift=goal_drift, approval_status=approval_status,
-        since=since, until=until, limit=limit, offset=offset,
+        decision=decision, session_id=session_id, source=source, exclude_source=exclude_source,
+        resource_contains=resource_contains, min_risk=min_risk, goal_drift=goal_drift,
+        approval_status=approval_status, since=since, until=until, limit=limit, offset=offset,
     )
     return AuditListResponse(items=items, total=total, limit=limit, offset=offset)
 

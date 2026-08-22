@@ -11,6 +11,7 @@ export function AuditPage() {
   const [decision, setDecision] = useState("");
   const [risk, setRisk] = useState("");
   const [drift, setDrift] = useState("");
+  const [origin, setOrigin] = useState("live");   // live (exclude demo) | demo | all
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<{ items: AuditEvent[]; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,16 +22,18 @@ export function AuditPage() {
     if (decision) f.decision = decision;
     if (drift) f.goal_drift = drift === "drift";
     if (risk) f.min_risk = risk === "critical" ? 85 : risk === "high" ? 60 : risk === "medium" ? 40 : 0;
+    if (origin === "live") f.exclude_source = "demo";
+    else if (origin === "demo") f.source = "demo";
     try {
       setData(await api.listAudit(f));
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load audit log");
     }
-  }, [decision, risk, drift, offset]);
+  }, [decision, risk, drift, origin, offset]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setOffset(0); }, [decision, risk, drift]);
+  useEffect(() => { setOffset(0); }, [decision, risk, drift, origin]);
 
   if (error && !data) return <ErrorState message={error} />;
   if (!data) return <Loading label="Loading audit log…" />;
@@ -60,6 +63,12 @@ export function AuditPage() {
           <label>Goal drift</label>
           <select className="select" value={drift} onChange={(e) => setDrift(e.target.value)}>
             <option value="">All</option><option value="drift">Drift only</option><option value="nodrift">No drift</option>
+          </select>
+        </div>
+        <div className="filter">
+          <label>Origin</label>
+          <select className="select" value={origin} onChange={(e) => setOrigin(e.target.value)}>
+            <option value="live">Live agents</option><option value="demo">Demo</option><option value="all">All</option>
           </select>
         </div>
         <div style={{ flex: 1 }} />

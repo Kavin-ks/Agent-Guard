@@ -9,21 +9,23 @@ vi.mock("../api/client", () => {
   }
   return { ApiError, api: {
     listAudit: vi.fn(), listApprovals: vi.fn(), approve: vi.fn(), reject: vi.fn(),
-    evaluate: vi.fn(), consume: vi.fn(), reportExecution: vi.fn(), getAudit: vi.fn(), health: vi.fn(),
+    evaluate: vi.fn(), consume: vi.fn(), reportExecution: vi.fn(), getAudit: vi.fn(),
+    health: vi.fn(), listAgents: vi.fn(() => Promise.resolve([])),
   } };
 });
 import { api, ApiError } from "../api/client";
 
 const mockList = api.listAudit as unknown as ReturnType<typeof vi.fn>;
+const mockAgents = api.listAgents as unknown as ReturnType<typeof vi.fn>;
 
 describe("Dashboard", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); mockAgents.mockResolvedValue([]); });
 
   it("renders stats and live activity (dashboard rendering)", async () => {
     mockList.mockResolvedValue({ items: [auditEvent(), denyEnv, askDelete], total: 3, limit: 100, offset: 0 });
     render(<DashboardPage />);
-    expect(await screen.findByText("Total Actions")).toBeInTheDocument();
-    expect(await screen.findByText("Live activity")).toBeInTheDocument();
+    expect(await screen.findByText("Guarded Calls")).toBeInTheDocument();
+    expect(await screen.findByText("Recent activity")).toBeInTheDocument();
   });
 
   it("displays an ALLOW action", async () => {

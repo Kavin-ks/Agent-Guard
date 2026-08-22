@@ -52,6 +52,8 @@ export interface EvaluateResponse {
   approval_id: string | null;
   execution_status: string;
   execution_note: string;
+  source: string;
+  prompt: string;
   action_id: string;
   latency_ms: number;
 }
@@ -62,6 +64,8 @@ export interface AuditEvent {
   action_id: string;
   session_id: string;
   agent_id: string;
+  source: string;
+  prompt: string;
   operation: string;
   resource: string;
   resource_kind: string;
@@ -139,5 +143,21 @@ export interface EvaluateRequest {
   destination?: string;
   session_id?: string;
   agent_id?: string;
+  source?: string;
+  prompt?: string;
   context?: Record<string, unknown>;
+}
+
+export interface AgentOut {
+  session_id: string;
+  agent_name: string;
+  source: string;
+  status: string;        // connected | disconnected
+  connected_at: string;
+  last_seen: string;
+  calls: number;
+  allowed: number;
+  asked: number;
+  denied: number;
+  last_decision: string | null;
 }

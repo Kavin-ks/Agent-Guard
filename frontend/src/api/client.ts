@@ -4,6 +4,7 @@
 // browser never holds the key).
 
 import type {
+  AgentOut,
   ApprovalRequest,
   AuditEvent,
   ConsumeResponse,
@@ -53,6 +54,8 @@ export interface AuditFilters {
   goal_drift?: boolean;
   min_risk?: number;
   approval_status?: string;
+  source?: string;
+  exclude_source?: string;
   limit?: number;
   offset?: number;
 }
@@ -90,4 +93,6 @@ export const api = {
 
   reportExecution: (eventId: string, status: string) =>
     request<AuditEvent>("POST", `/audit/${eventId}/execution`, { status }),
+
+  listAgents: () => request<AgentOut[]>("GET", "/agents"),
 };

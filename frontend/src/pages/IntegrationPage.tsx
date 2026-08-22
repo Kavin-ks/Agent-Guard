@@ -1,40 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { AuditEvent } from "../types";
+import type { AgentOut, AuditEvent } from "../types";
 import { Loading, ErrorState, DecisionBadge } from "../components/common";
 import { PipelineDiagram } from "../components/PipelineDiagram";
 import { formatTime } from "../lib/format";
 
-interface AgentRow {
-  agent: string;
-  session: string;
-  actions: number;
-  lastDecision: string;
-  lastSeen: string;
-}
-
-function deriveAgents(events: AuditEvent[]): AgentRow[] {
-  const map = new Map<string, AgentRow>();
-  for (const e of events) {
-    const key = `${e.agent_id}:${e.session_id}`;
-    const row = map.get(key);
-    if (row) {
-      row.actions += 1;
-    } else {
-      map.set(key, { agent: e.agent_id, session: e.session_id, actions: 1,
-                     lastDecision: e.decision, lastSeen: e.created_at });
-    }
-  }
-  return [...map.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
-}
-
 export function IntegrationPage() {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const [agents, setAgents] = useState<AgentOut[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setEvents((await api.listAudit({ limit: 200 })).items);
+      const [audit, ag] = await Promise.all([
+        api.listAudit({ exclude_source: "demo", limit: 200 }),
+        api.listAgents().catch(() => []),
+      ]);
+      setEvents(audit.items);
+      setAgents(ag);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load activity");
@@ -50,8 +33,7 @@ export function IntegrationPage() {
   if (error && !events) return <ErrorState message={error} />;
   if (!events) return <Loading label="Loading integration status…" />;
 
-  const agents = deriveAgents(events);
-  const mcpActive = agents.some((a) => a.session.startsWith("mcp") || a.agent.includes("mcp"));
+  const mcpActive = agents.some((a) => a.status === "connected");
   const recent = events.slice(0, 8);
 
   return (
@@ -139,16 +121,23 @@ if r.executed:      # runs only if authorized
               <div className="state">No agents have connected yet. Configure the MCP server or SDK above.</div>
             ) : (
               <>
-                <div className="row head" style={{ gridTemplateColumns: "1fr 1fr 80px 100px 90px" }}>
-                  <div>Agent</div><div>Session</div><div className="right">Calls</div><div className="right">Last</div><div className="right">Decision</div>
+                <div className="row head" style={{ gridTemplateColumns: "1fr 96px 60px 90px 84px" }}>
+                  <div>Agent / Session</div><div>Status</div><div className="right">Calls</div><div className="right">Last seen</div><div className="right">Last</div>
                 </div>
                 {agents.map((a) => (
-                  <div className="row" key={a.agent + a.session} style={{ gridTemplateColumns: "1fr 1fr 80px 100px 90px", cursor: "default" }}>
-                    <div className="res-main">{a.agent}</div>
-                    <div className="res-sub mono">{a.session}</div>
-                    <div className="right mono">{a.actions}</div>
-                    <div className="right cell-time">{formatTime(a.lastSeen)}</div>
-                    <div className="right"><DecisionBadge decision={a.lastDecision} /></div>
+                  <div className="row" key={a.session_id} style={{ gridTemplateColumns: "1fr 96px 60px 90px 84px", cursor: "default" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="res-main">{a.agent_name}</div>
+                      <div className="res-sub mono">{a.session_id}</div>
+                    </div>
+                    <div>
+                      <span className={`badge ${a.status === "connected" ? "allow" : "muted"}`}>
+                        <span className={`dot ${a.status === "connected" ? "ok" : "off"}`} />{a.status}
+                      </span>
+                    </div>
+                    <div className="right mono">{a.calls}</div>
+                    <div className="right cell-time">{formatTime(a.last_seen)}</div>
+                    <div className="right">{a.last_decision ? <DecisionBadge decision={a.last_decision} /> : <span className="faint">—</span>}</div>
                   </div>
                 ))}
               </>

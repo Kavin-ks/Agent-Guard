@@ -14,8 +14,8 @@ from agentguard.advisors import ClaudeRelevanceAdvisor, HeuristicRelevanceAdviso
 
 from .config import get_settings
 from .service import GuardService
-from .store.base import ApprovalStore, AuditStore
-from .store.sqlite import SqliteApprovalStore, SqliteAuditStore
+from .store.base import ApprovalStore, AuditStore, SessionStore
+from .store.sqlite import SqliteApprovalStore, SqliteAuditStore, SqliteSessionStore
 
 
 @lru_cache
@@ -54,6 +54,11 @@ def get_approval_store() -> ApprovalStore:
 
 
 @lru_cache
+def get_session_store() -> SessionStore:
+    return SqliteSessionStore(get_settings().db_path)
+
+
+@lru_cache
 def get_service() -> GuardService:
     s = get_settings()
     return GuardService(
@@ -61,4 +66,5 @@ def get_service() -> GuardService:
         audit_store=get_audit_store(),
         approval_store=get_approval_store(),
         approval_ttl_seconds=s.approval_ttl_seconds,
+        session_store=get_session_store(),
     )

@@ -70,6 +70,8 @@ def evaluate(
         approval_required=outcome.approval is not None,
         approval_id=outcome.approval.approval_id if outcome.approval else None,
         execution_status=event.execution_status,
+        source=event.source,
+        prompt=event.prompt,
         policy=AppliedPolicy(
             session_id=policy.session_id,
             allowed_scopes=policy.allowed_scopes,

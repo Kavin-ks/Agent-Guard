@@ -598,6 +598,37 @@ IDE's own internal tools — the agent must connect its tools to Agent Guard.
 > **UI:** the dashboard is a light-theme enterprise console (Dashboard, Approval
 > Queue, Audit Log, Integration, Live Demo) — all fed by the real backend.
 
+## Real agent activity, sessions & prompt history (Phase 11)
+
+The dashboard shows **real connected-agent activity**, cleanly separated from demo
+scenarios:
+
+- **Origin tagging** — every evaluation carries a `source` (`agent` | `demo` |
+  `sdk`). The Dashboard, Integration, and Audit "Live" views exclude `demo`; the
+  Live Demo page is the only place demo scenarios appear (tagged `source=demo`).
+- **Real sessions** — an agent (e.g. Antigravity over MCP) registers a **stable
+  session** once per connection (`POST /agents/register`); every guarded call
+  updates its `last_seen` and allow/ask/deny counts. `GET /agents` returns the
+  registry with `connected`/`disconnected` status. Repeated calls reuse the one
+  session — no duplicates. Demo activity is never registered as an agent.
+- **Prompt → action → decision → result history** — each event stores the user
+  `prompt` (secrets **redacted** to `[REDACTED]`), the proposed action, the
+  decision + signals, approval status, and execution status. The Action detail
+  drawer shows the full chain, including the redacted prompt and origin.
+
+**The "many permission popups" problem (honest):** those dialogs are the IDE's
+own per-tool-call / per-file confirmations — Agent Guard **cannot** suppress an
+IDE's internal prompts (claiming otherwise would be dishonest). What we reduced:
+a single stable MCP session (no re-registration per call) and a batch tool
+`guarded_read_files([...])` that reads several files in **one** MCP invocation —
+each path still evaluated individually, so a secret file in the batch is still
+denied. Dangerous ops (write/delete/command/network) remain individually
+evaluated. No security rule was weakened to cut prompts.
+
+**What Agent Guard can/cannot intercept:** it governs tool calls routed **through**
+the MCP server or SDK. It cannot silently intercept an IDE's built-in tools — the
+agent must connect its tools to Agent Guard.
+
 ## 10. Security model
 
 - **Deterministic gates are authoritative.** Hard gates (glob matches, secret

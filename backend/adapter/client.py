@@ -87,3 +87,7 @@ class AgentGuardClient:
 
     def record_execution(self, event_id: str, status: str) -> dict:
         return self._request("POST", f"/audit/{event_id}/execution", json={"status": status})
+
+    def register_agent(self, session_id: str, agent_name: str, source: str = "agent") -> dict:
+        return self._request("POST", "/agents/register",
+                             json={"session_id": session_id, "agent_name": agent_name, "source": source})

@@ -40,8 +40,11 @@ def build_local_guard(db_path: str, api_key: str = "sim-key", advisor: str = "he
         os.environ.pop("AGENTGUARD_APPROVAL_TTL_SECONDS", None)
 
     from api.config import get_settings
-    from api.deps import get_approval_store, get_audit_store, get_engine, get_service
-    for f in (get_settings, get_engine, get_audit_store, get_approval_store, get_service):
+    from api.deps import (
+        get_approval_store, get_audit_store, get_engine, get_service, get_session_store,
+    )
+    for f in (get_settings, get_engine, get_audit_store, get_approval_store,
+              get_session_store, get_service):
         f.cache_clear()
 
     from api.main import create_app

@@ -9,7 +9,7 @@ const AGENT = "Coding Agent";
 
 function req(action: string, resource: string, tool: string): EvaluateRequest {
   return { goal: GOAL, action, resource, resource_kind: action === "network" ? "url" : "file",
-           tool, session_id: "demo", agent_id: AGENT };
+           tool, session_id: "demo", agent_id: AGENT, source: "demo" };
 }
 
 type SState = {
@@ -37,7 +37,7 @@ function exfilRequest(): EvaluateRequest {
     tool: "send_external_request", destination: EXFIL_DEST,
     // Fake/simulated sensitive values only — never real credentials.
     payload: "user_email=alice@example.com API_KEY=sk-ant-api03-ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
-    session_id: "demo", agent_id: AGENT,
+    session_id: "demo", agent_id: AGENT, source: "demo",
   };
 }
 

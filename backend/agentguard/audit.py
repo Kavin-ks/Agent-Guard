@@ -54,6 +54,11 @@ class AuditEvent(BaseModel):
     action_id: str
     session_id: str
     agent_id: str = "unknown-agent"
+    # Origin of the action: "agent" (real MCP/SDK agent), "demo" (Live Demo page),
+    # "sdk", or "system". The dashboard separates live agent activity from demo.
+    source: str = "sdk"
+    # The user prompt / instruction that led to this action, REDACTED. Never raw.
+    prompt: str = ""
 
     # Action metadata (safe)
     operation: str
@@ -89,6 +94,27 @@ class AuditEvent(BaseModel):
     approval_status: str | None = None          # None if not an ASK
     approval_id: str | None = None
     execution_status: str = ExecutionStatus.NOT_EXECUTED.value
+
+
+class AgentSession(BaseModel):
+    """A connected agent session (e.g. Antigravity over MCP). Real, not demo."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    agent_name: str = "agent"
+    source: str = "agent"                 # agent | sdk | mcp
+    connected_at: datetime = Field(default_factory=_utcnow)
+    last_seen: datetime = Field(default_factory=_utcnow)
+    calls: int = 0
+    allowed: int = 0
+    asked: int = 0
+    denied: int = 0
+    last_decision: str | None = None
+
+    def status(self, now: datetime | None = None, idle_seconds: int = 120) -> str:
+        now = now or _utcnow()
+        return "connected" if (now - self.last_seen).total_seconds() <= idle_seconds else "disconnected"
 
 
 class ApprovalRequest(BaseModel):

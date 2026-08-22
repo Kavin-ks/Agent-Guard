@@ -23,7 +23,7 @@ def client(tmp_path_factory) -> TestClient:
     # Isolated temp DB so tests never touch a real ./data store.
     os.environ["AGENTGUARD_DB_PATH"] = str(tmp_path_factory.mktemp("api") / "api.db")
     from api.config import get_settings
-    from api.deps import get_approval_store, get_audit_store, get_engine, get_service
+    from api.deps import get_approval_store, get_audit_store, get_engine, get_service, get_session_store
 
     for f in (get_settings, get_engine, get_audit_store, get_approval_store, get_service):
         f.cache_clear()

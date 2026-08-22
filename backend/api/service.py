@@ -15,6 +15,7 @@ from datetime import timedelta
 
 from agentguard import Engine
 from agentguard.audit import (
+    AgentSession,
     ApprovalRequest,
     ApprovalStatus,
     AuditEvent,
@@ -23,10 +24,14 @@ from agentguard.audit import (
 )
 from agentguard.fingerprint import action_fingerprint
 from agentguard.models import Decision
+from agentguard.redaction import redact_text
 
 from .bridge import build_action, build_policy
 from .schemas import EvaluateRequest
-from .store.base import ApprovalStore, AuditStore
+from .store.base import ApprovalStore, AuditStore, SessionStore
+
+# Sources that represent a real connected agent (recorded in the session registry).
+_AGENT_SOURCES = {"agent", "mcp", "sdk"}
 
 
 class ServiceError(Exception):
@@ -65,11 +70,13 @@ class GuardService:
         audit_store: AuditStore,
         approval_store: ApprovalStore,
         approval_ttl_seconds: int = 3600,
+        session_store: SessionStore | None = None,
     ) -> None:
         self._engine = engine
         self._audit = audit_store
         self._approvals = approval_store
         self._ttl = approval_ttl_seconds
+        self._sessions = session_store
 
     # -- evaluate ----------------------------------------------------------
     def evaluate(self, req: EvaluateRequest) -> EvaluationOutcome:
@@ -89,6 +96,8 @@ class GuardService:
             action_id=str(result.action_id),
             session_id=req.session_id,
             agent_id=req.agent_id,
+            source=req.source,
+            prompt=redact_text(req.prompt),   # user prompt, secrets scrubbed
             operation=action.operation.value,
             resource=action.resource.value,
             resource_kind=action.resource.kind.value,
@@ -144,7 +153,32 @@ class GuardService:
         if approval is not None:
             self._approvals.add(approval)
 
+        # Record the connected-agent session (real agents only; never demo).
+        if self._sessions is not None and req.source in _AGENT_SOURCES:
+            self._sessions.record_call(req.session_id, req.agent_id, req.source, decision.value)
+
         return EvaluationOutcome(result=result, event=event, approval=approval)
+
+    # -- agent sessions ----------------------------------------------------
+    def register_session(self, session_id: str, agent_name: str, source: str = "agent") -> AgentSession:
+        if self._sessions is None:
+            raise ServiceError("session registry not configured")
+        existing = self._sessions.get(session_id)
+        session = existing or AgentSession(session_id=session_id, agent_name=agent_name, source=source)
+        session.agent_name = agent_name or session.agent_name
+        session.source = source or session.source
+        session.last_seen = _utcnow()
+        self._sessions.upsert(session)
+        return session
+
+    def list_sessions(self) -> list[AgentSession]:
+        return self._sessions.list() if self._sessions is not None else []
+
+    def get_session(self, session_id: str) -> AgentSession:
+        s = self._sessions.get(session_id) if self._sessions is not None else None
+        if s is None:
+            raise NotFoundError(f"session '{session_id}' not found")
+        return s
 
     # -- audit reads -------------------------------------------------------
     def get_event(self, event_id: str) -> AuditEvent:

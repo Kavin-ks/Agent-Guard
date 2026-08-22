@@ -20,7 +20,7 @@ GOAL = "Build a React frontend. Do not modify backend or database, and never acc
 
 def _clear_caches():
     from api.config import get_settings
-    from api.deps import get_approval_store, get_audit_store, get_engine, get_service
+    from api.deps import get_approval_store, get_audit_store, get_engine, get_service, get_session_store
     for f in (get_settings, get_engine, get_audit_store, get_approval_store, get_service):
         f.cache_clear()
 

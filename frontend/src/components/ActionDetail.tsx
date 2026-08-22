@@ -49,6 +49,13 @@ export function ActionDetail({ event, onClose }: { event: AuditEvent; onClose: (
 
           <RiskMeter score={event.risk_score} signals={event.signals} />
 
+          {event.prompt && (
+            <>
+              <div className="section-label">User prompt (redacted)</div>
+              <div className="muted" style={{ fontSize: 13 }}>{event.prompt}</div>
+            </>
+          )}
+
           <div className="section-label">Goal</div>
           <div className="muted" style={{ fontSize: 13 }}>{event.goal_text || "—"}</div>
 
@@ -58,6 +65,8 @@ export function ActionDetail({ event, onClose }: { event: AuditEvent; onClose: (
           <div className="kv"><span className="k">Tool</span><span className="v mono">{event.tool}</span></div>
           <div className="kv"><span className="k">Destination</span><span className="v mono">{event.destination ?? "—"}</span></div>
           <div className="kv"><span className="k">Agent</span><span className="v">{event.agent_id}</span></div>
+          <div className="kv"><span className="k">Session</span><span className="v mono">{event.session_id}</span></div>
+          <div className="kv"><span className="k">Origin</span><span className="v">{event.source}</span></div>
 
           <div className="section-label">Decision</div>
           <div className="kv"><span className="k">Final</span><span className="v"><DecisionBadge decision={event.decision} /></span></div>

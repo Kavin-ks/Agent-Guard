@@ -11,7 +11,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from agentguard.audit import ApprovalRequest, AuditEvent
+from agentguard.audit import AgentSession, ApprovalRequest, AuditEvent
 
 
 class AuditStore(ABC):
@@ -27,6 +27,8 @@ class AuditStore(ABC):
         *,
         decision: str | None = None,
         session_id: str | None = None,
+        source: str | None = None,
+        exclude_source: str | None = None,
         resource_contains: str | None = None,
         min_risk: int | None = None,
         goal_drift: bool | None = None,
@@ -62,3 +64,17 @@ class ApprovalStore(ABC):
 
     @abstractmethod
     def update(self, approval: ApprovalRequest) -> None: ...
+
+
+class SessionStore(ABC):
+    @abstractmethod
+    def get(self, session_id: str) -> AgentSession | None: ...
+
+    @abstractmethod
+    def upsert(self, session: AgentSession) -> None: ...
+
+    @abstractmethod
+    def record_call(self, session_id: str, agent_name: str, source: str, decision: str) -> AgentSession: ...
+
+    @abstractmethod
+    def list(self, *, limit: int = 100) -> list[AgentSession]: ...
