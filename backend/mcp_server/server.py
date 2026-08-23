@@ -16,31 +16,39 @@ Run:  cd backend && .venv/bin/python -m mcp_server
 
 from __future__ import annotations
 
+import logging
 import os
-import uuid
 
 from adapter.client import AgentGuardClient
 
+from .config import (
+    resolve_agent_name,
+    resolve_api_key,
+    resolve_session_id,
+    resolve_url,
+    resolve_workspace,
+)
 from .provider import GuardedToolProvider
+
+logger = logging.getLogger("agentguard.mcp")
 
 
 def build_provider() -> GuardedToolProvider:
-    client = AgentGuardClient(
-        base_url=os.environ.get("AGENTGUARD_URL", "http://127.0.0.1:8000"),
-        api_key=os.environ.get("AGENTGUARD_API_KEY", ""),
-    )
-    # Real, stable identity for this MCP connection. The agent name defaults to
-    # "Antigravity"; the session id is stable for the life of this process (one
-    # connection) so repeated tool calls reuse the SAME session — no duplicate
-    # sessions, no re-registration per call.
-    agent = os.environ.get("AGENTGUARD_AGENT", "Antigravity")
-    session = os.environ.get("AGENTGUARD_SESSION") or f"mcp-{uuid.uuid4().hex[:12]}"
+    url = resolve_url()
+    client = AgentGuardClient(base_url=url, api_key=resolve_api_key())
+    workspace = resolve_workspace()
+    # Stable identity: the agent name and a session id that persists across
+    # reconnects (per workspace), so a reconnecting Antigravity UPDATES the same
+    # session instead of leaving a stale "disconnected" one behind.
+    session = resolve_session_id(workspace)
+    logger.info("Agent Guard MCP → %s  (agent=%s session=%s workspace=%s)",
+                url, resolve_agent_name(), session, workspace)
     return GuardedToolProvider(
         client=client,
-        workspace=os.environ.get("AGENTGUARD_WORKSPACE", "./mcp-workspace"),
+        workspace=workspace,
         goal=os.environ.get("AGENTGUARD_GOAL", ""),
         session_id=session,
-        agent_id=agent,
+        agent_id=resolve_agent_name(),
     )
 
 

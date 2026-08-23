@@ -53,6 +53,23 @@ class HeuristicRelevanceAdvisor:
         rep = compile_goal_representation(request.goal)
         resource = request.resource
 
+        # 0. Unscoped goal: no topics and no allowed/restricted scopes means there
+        #    is no basis to call anything "goal drift" — drift is relative to a
+        #    goal. Return MEDIUM (ambiguous, not a hard block) so the deterministic
+        #    gates stay authoritative (secrets/destructive/exfil still blocked)
+        #    without the advisory layer turning ordinary reads into ASK. Outbound
+        #    actions still lean cautious below.
+        unscoped = not rep.topics and not rep.allowed_resources and not rep.restricted_resources
+        if unscoped and request.operation not in ("network", "transmit"):
+            return RelevanceAssessment(
+                relevance=RelevanceLevel.MEDIUM,
+                confidence=0.5,
+                reason="No scoped goal constraints provided; deterministic controls apply.",
+                recommended_action=Decision.ALLOW,
+                goal_drift=False,
+                source=self.source,
+            )
+
         # 1. Resource in a restricted scope -> clearly off-goal.
         if rep.restricted_resources and matches_any(rep.restricted_resources, resource):
             return RelevanceAssessment(
