@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { AgentOut, AuditEvent } from "../types";
 import { Loading, ErrorState, DecisionBadge } from "../components/common";
-import { PipelineDiagram } from "../components/PipelineDiagram";
 import { formatTime } from "../lib/format";
 
 export function IntegrationPage() {
@@ -146,10 +145,6 @@ if r.executed:      # runs only if authorized
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div className="panel">
-            <div className="panel-head"><span className="panel-title">Security flow</span></div>
-            <PipelineDiagram decision={recent[0]?.decision ?? null} activeStage={recent[0] ? "decision" : undefined} />
-          </div>
           <div className="panel">
             <div className="panel-head"><span className="panel-title">Recent guarded calls</span></div>
             <div className="panel-body">

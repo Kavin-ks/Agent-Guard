@@ -2,7 +2,6 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { Decision, EvaluateRequest } from "../types";
 import { DecisionBadge } from "../components/common";
-import { PipelineDiagram, type Stage } from "../components/PipelineDiagram";
 
 const GOAL = "Build a React frontend. Do not modify backend or database, and never access secrets.";
 const AGENT = "Coding Agent";
@@ -43,8 +42,6 @@ function exfilRequest(): EvaluateRequest {
 
 export function DemoPage() {
   const [state, setState] = useState<Record<number, SState>>({});
-  const [lastDecision, setLastDecision] = useState<Decision | null>(null);
-  const [stage, setStage] = useState<Stage | undefined>(undefined);
   const set = (n: number, s: SState) => setState((p) => ({ ...p, [n]: s }));
 
   function fail(n: number, e: unknown) {
@@ -53,15 +50,9 @@ export function DemoPage() {
   }
 
   async function runAuto(n: number, r: EvaluateRequest) {
-    set(n, { status: "running" });
-    setStage("guard");
-    try {
-      const res = await api.evaluate(r);
-      setLastDecision(res.decision); setStage("decision");
-      if (res.decision === "ALLOW") {
-        await api.reportExecution(res.event_id, "REPORTED_EXECUTED");
-        setStage("execution");
-        set(n, { status: "done", decision: "ALLOW", executed: true,
+    set(n, { status: "running" });    try {
+      const res = await api.evaluate(r);      if (res.decision === "ALLOW") {
+        await api.reportExecution(res.event_id, "REPORTED_EXECUTED");        set(n, { status: "done", decision: "ALLOW", executed: true,
           note: "Authorized — tool executed and recorded.", eventId: res.event_id });
       } else {
         set(n, { status: "done", decision: res.decision, executed: false,
@@ -71,12 +62,8 @@ export function DemoPage() {
   }
 
   async function runAsk(n: number, r: EvaluateRequest) {
-    set(n, { status: "running" });
-    setStage("guard");
-    try {
-      const res = await api.evaluate(r);
-      setLastDecision(res.decision); setStage("decision");
-      set(n, { status: "awaiting", decision: res.decision, executed: false,
+    set(n, { status: "running" });    try {
+      const res = await api.evaluate(r);      set(n, { status: "awaiting", decision: res.decision, executed: false,
         approvalId: res.approval_id, eventId: res.event_id,
         note: "Awaiting human approval — tool has NOT executed." });
     } catch (e) { fail(n, e); }
@@ -89,9 +76,7 @@ export function DemoPage() {
       await api.approve(s.approvalId);
       const c = await api.consume(s.approvalId, r); // fingerprint re-verified server-side
       if (c.authorized) {
-        if (s.eventId) await api.reportExecution(s.eventId, "REPORTED_EXECUTED");
-        setStage("execution");
-        set(n, { ...s, status: "done", executed: true,
+        if (s.eventId) await api.reportExecution(s.eventId, "REPORTED_EXECUTED");        set(n, { ...s, status: "done", executed: true,
           note: "Fingerprint verified · authorized · tool executed exactly once." });
       } else {
         set(n, { ...s, status: "done", executed: false, note: `Blocked: ${c.reason}` });
@@ -110,15 +95,11 @@ export function DemoPage() {
   }
 
   async function attack(n: number) {
-    set(n, { status: "running", note: "Approving a harmless delete, then reusing it for database.sql…" });
-    setStage("guard");
-    try {
+    set(n, { status: "running", note: "Approving a harmless delete, then reusing it for database.sql…" });    try {
       const ask = await api.evaluate(req("delete", "src/generated.jsx", "delete_file"));
       if (ask.approval_id) await api.approve(ask.approval_id);
       // Attacker reuses the approval for a DIFFERENT, dangerous resource.
-      const c = await api.consume(ask.approval_id!, req("delete", "database.sql", "delete_file"));
-      setLastDecision("DENY"); setStage("decision");
-      set(n, { status: "done", decision: "DENY", executed: c.authorized,
+      const c = await api.consume(ask.approval_id!, req("delete", "database.sql", "delete_file"));      set(n, { status: "done", decision: "DENY", executed: c.authorized,
         note: c.authorized ? "UNEXPECTED: authorized" : `BLOCKED · ${c.reason}` });
     } catch (e) { fail(n, e); }
   }
@@ -152,7 +133,7 @@ export function DemoPage() {
         <span className="faint" style={{ fontSize: 12 }}>Goal: “{GOAL}”</span>
       </div>
 
-      <div className="grid-2">
+      <div>
         <div>
           {SCENARIOS.map((sc) => {
             const s = state[sc.n] ?? { status: "idle" as const };
@@ -196,11 +177,6 @@ export function DemoPage() {
               </div>
             );
           })}
-        </div>
-
-        <div className="panel" style={{ position: "sticky", top: 90 }}>
-          <div className="panel-head"><span className="panel-title">Live security flow</span></div>
-          <PipelineDiagram decision={lastDecision} activeStage={stage} />
         </div>
       </div>
     </>
