@@ -2,6 +2,10 @@
 
 **Runtime Goal-Aware Authorization Firewall for Autonomous AI Agents**
 
+> **▶ Live demo — [agentguard-web-9b55.onrender.com](https://agentguard-web-9b55.onrender.com)**
+> The full dashboard running live: real ALLOW / ASK / DENY decisions, the approval queue, the audit log, and the agent-integration view.
+> _Free hosting — the first request may take ~50s while the instance wakes, then it's instant._
+
 Traditional permission systems decide *what* tools an agent may use. They do not
 continuously check whether **each individual action still matches the user's
 original goal and security constraints**. Agent Guard sits between an autonomous
@@ -89,9 +93,12 @@ frontend/              # Dashboard (light-theme, Phase 7+10): React + TS + Vite,
 
 ## Quick start — Docker (one command)
 
+> Prefer to just look? The stack is **already deployed** at **[agentguard-web-9b55.onrender.com](https://agentguard-web-9b55.onrender.com)** (Render, free tier). To run it yourself:
+
 The whole stack (backend + dashboard + reverse proxy) runs with one command. The
 nginx proxy serves the dashboard and forwards `/api/*` to the backend, injecting
-the `X-API-Key` header **server-side** — the browser never sees the key.
+the `X-API-Key` header **server-side** — the browser never sees the key. The same
+two containers deploy to Render via the included [`render.yaml`](render.yaml) blueprint.
 
 ```bash
 git clone https://github.com/Kavin-ks/Agent-Guard.git
