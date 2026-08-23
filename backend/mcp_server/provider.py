@@ -15,6 +15,8 @@ in-process Agent Guard. It duplicates NO security logic.
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass, field
 
 from adapter.client import AgentGuardClient
@@ -68,6 +70,7 @@ class GuardedToolProvider:
         session_id: str = "mcp",
         agent_id: str = "Antigravity",
         register: bool = True,
+        heartbeat_seconds: int = 30,
     ) -> None:
         self.ws = Workspace(workspace)
         self._client = client
@@ -78,12 +81,27 @@ class GuardedToolProvider:
             agent_id=agent_id, source="agent",
         )
         self.goal = goal or "Assist with the current task within the authorized scope."
-        # Register the connected session once (reused for the whole connection).
+        # Register the connected session once (reused for the whole connection),
+        # then heartbeat while this MCP process is alive so the dashboard shows
+        # the agent as CONNECTED for the entire IDE session — not just for the
+        # ~2 minutes after the last tool call.
         if register:
             try:
                 client.register_agent(session_id, agent_id, "agent")
             except Exception:  # backend not reachable yet -> recorded on first call
                 pass
+            if heartbeat_seconds and heartbeat_seconds > 0:
+                threading.Thread(
+                    target=self._heartbeat_loop, args=(heartbeat_seconds,), daemon=True
+                ).start()
+
+    def _heartbeat_loop(self, interval: int) -> None:
+        while True:
+            time.sleep(interval)
+            try:
+                self._client.register_agent(self.session_id, self.agent_name, "agent")
+            except Exception:
+                pass  # transient backend hiccup — try again next tick
 
     def set_goal(self, goal: str) -> str:
         self.goal = goal
