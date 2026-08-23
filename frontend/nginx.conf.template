@@ -6,7 +6,9 @@
 # preserved because they are not defined as environment variables.
 
 server {
-    listen 80;
+    # Render (and other PaaS) assign the port via $PORT; docker-compose sets
+    # PORT=80 so local `docker compose up` is unchanged. envsubst fills it in.
+    listen ${PORT};
     server_name _;
 
     root /usr/share/nginx/html;

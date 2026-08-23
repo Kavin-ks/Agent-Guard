@@ -1,0 +1,55 @@
+# Agent Guard — Render Blueprint (free tier).
+#
+# Two Docker web services, mirroring docker-compose:
+#   agentguard-backend  →  FastAPI engine (authoritative; requires the API key)
+#   agentguard-web      →  nginx: serves the dashboard AND proxies /api/* to the
+#                          backend, injecting X-API-Key server-side (never in the
+#                          browser). This preserves the security model in the cloud.
+#
+# One-click deploy:  Render dashboard → New → Blueprint → pick this repo → Apply.
+#
+# NOTE on service URLs: Render URLs are globally unique. If the name below is
+# taken, Render appends a suffix (e.g. agentguard-backend-xyz.onrender.com).
+# After the first deploy, confirm the backend's real URL and, if it differs,
+# update BACKEND_URL on the web service to match (Dashboard → agentguard-web →
+# Environment). Everything else is wired automatically.
+
+services:
+  # ---- Backend: FastAPI decision engine ----------------------------------
+  - type: web
+    name: agentguard-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    # Render assigns the port via $PORT; bind it instead of the fixed 8000.
+    dockerCommand: sh -c "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: AGENTGUARD_API_KEY
+        generateValue: true            # Render generates a strong random key
+      - key: AGENTGUARD_DB_PATH
+        value: /tmp/agentguard.db       # free tier: ephemeral (no persistent disk)
+      - key: AGENTGUARD_RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: ANTHROPIC_API_KEY
+        sync: false                     # optional: set in dashboard for the LLM advisor
+
+  # ---- Web: dashboard + key-injecting reverse proxy ----------------------
+  - type: web
+    name: agentguard-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      # Same key as the backend, copied server-side; never exposed to the browser.
+      - key: AGENTGUARD_API_KEY
+        fromService:
+          type: web
+          name: agentguard-backend
+          envVarKey: AGENTGUARD_API_KEY
+      # Backend's public URL. Must include the scheme. If Render suffixed the
+      # backend name, update this to match the real URL after the first deploy.
+      - key: BACKEND_URL
+        value: https://agentguard-backend.onrender.com

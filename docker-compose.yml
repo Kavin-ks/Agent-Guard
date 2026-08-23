@@ -23,6 +23,8 @@ services:
     env_file: ./deploy/production.env   # provides AGENTGUARD_API_KEY for injection
     environment:
       BACKEND_URL: http://backend:8000
+      PORT: 80                          # nginx listens on ${PORT}; 80 locally
+
     depends_on:
       backend:
         condition: service_healthy      # wait for the backend health check

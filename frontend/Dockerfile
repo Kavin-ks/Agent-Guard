@@ -19,6 +19,7 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 # Use 127.0.0.1 (not "localhost") so the check forces IPv4 — nginx listens on
-# IPv4 :80, while "localhost" can resolve to ::1 and be refused.
+# IPv4, while "localhost" can resolve to ::1 and be refused. Port follows $PORT
+# (defaults to 80 for local docker compose).
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
-    CMD wget -qO- http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://127.0.0.1:${PORT:-80}/api/health >/dev/null 2>&1 || exit 1
