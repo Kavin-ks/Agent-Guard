@@ -23,8 +23,8 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
-    # Render assigns the port via $PORT; bind it instead of the fixed 8000.
-    dockerCommand: sh -c "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+    # Port binding is handled inside the Dockerfile (CMD binds ${PORT:-8000}),
+    # so no start-command override is needed here.
     envVars:
       - key: AGENTGUARD_API_KEY
         generateValue: true            # Render generates a strong random key
