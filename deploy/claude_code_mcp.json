@@ -1,13 +1,16 @@
 {
-  "//": "Agent Guard MCP server for Claude Code (or any MCP-capable IDE/agent).",
-  "//setup": "1) start the backend (uvicorn or docker compose). 2) copy this into your project's .mcp.json (or run `claude mcp add`). 3) set the absolute paths, the API key (same as the backend's AGENTGUARD_API_KEY), the workspace root, and the session goal.",
+  "//": "Agent Guard MCP server for Antigravity / Claude Code (any MCP IDE).",
+  "//antigravity": "Antigravity reads ~/.gemini/config/mcp_config.json. Some IDEs ignore `cwd`, so PYTHONPATH (below) is REQUIRED — it lets `python -m mcp_server` import from any working directory. Manage/reconnect the server in Antigravity via  Additional Options (…) > MCP Servers.",
+  "//setup": "1) start the backend (docker compose up  or  uvicorn). 2) put this in ~/.gemini/config/mcp_config.json (Antigravity) or your project .mcp.json (Claude Code). 3) set the absolute paths, workspace, and (for Docker) the proxy URL + key.",
   "mcpServers": {
     "agent-guard": {
       "command": "/ABSOLUTE/PATH/TO/Agent-Guard/backend/.venv/bin/python",
       "args": ["-m", "mcp_server"],
       "cwd": "/ABSOLUTE/PATH/TO/Agent-Guard/backend",
       "env": {
-        "//AGENTGUARD_URL": "Docker: use the proxy http://localhost:8080/api (injects the key). Bare uvicorn: http://127.0.0.1:8000",
+        "//PYTHONPATH": "REQUIRED — absolute path to the backend/ dir, so -m mcp_server imports even when the IDE ignores cwd.",
+        "PYTHONPATH": "/ABSOLUTE/PATH/TO/Agent-Guard/backend",
+        "//AGENTGUARD_URL": "Docker: the proxy http://localhost:8080/api (injects the key). Bare uvicorn: http://127.0.0.1:8000",
         "AGENTGUARD_URL": "http://localhost:8080/api",
         "//AGENTGUARD_API_KEY": "Match the backend key. If omitted, the server reads it from deploy/production.env.",
         "AGENTGUARD_API_KEY": "REPLACE_WITH_BACKEND_API_KEY",
