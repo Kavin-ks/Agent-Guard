@@ -37,6 +37,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-API-Key "${AGENTGUARD_API_KEY}";
-        proxy_read_timeout 30s;
+        # Free-tier backends spin down after inactivity and take ~30-60s to cold
+        # start. Wait long enough for the wake-up so a first request loads slowly
+        # instead of returning 502 Bad Gateway.
+        proxy_connect_timeout 90s;
+        proxy_send_timeout 90s;
+        proxy_read_timeout 90s;
     }
 }
