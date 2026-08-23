@@ -52,4 +52,4 @@ services:
       # Backend's public URL. Must include the scheme. If Render suffixed the
       # backend name, update this to match the real URL after the first deploy.
       - key: BACKEND_URL
-        value: https://agentguard-backend.onrender.com
+        value: https://agentguard-backend-khb7.onrender.com
